@@ -6,6 +6,7 @@ int LightRadius;
 
 string StorageMaterialsKeyword;
 string StorageComponentsKeyword;
+string AlgaeFarmKeyword;
 
 string SolarPointerRCKeyword;
 string SolarRotorKeyword;
@@ -15,7 +16,8 @@ double Proximity, SolarDirectionSwitch;
 double SolarPowerOutput, SolarPowerOutputPrev;
 
 ////////////////////////////////////// LISTS ///////////////////////////////////
-List<IMyInteriorLight> LightBlocks = new List<IMyInteriorLight>();
+List<IMyReflectorLight> ReflectorLightBlocks = new List<IMyReflectorLight>();
+List<IMyInteriorLight> InteriorLightBlocks = new List<IMyInteriorLight>();
 
 List<IMyAssembler> assemblers = new List<IMyAssembler>();
 List<IMyRefinery> refinerys = new List<IMyRefinery>();
@@ -34,9 +36,12 @@ public Program()
 	cG = 255;
 	cB = 140;
 	LightRadius = 10;
-	// Storage -----------------------------------------------------------------------
+
+	// Storage ---------------------------------------------------------------------
 	StorageMaterialsKeyword = "[Materials]";
 	StorageComponentsKeyword = "[Components]";
+	// Algae -----------------------------------------------------------------------
+	AlgaeFarmKeyword = "Algae Farm";
 	// Solar -----------------------------------------------------------------------
 	SolarPointerRCKeyword = "[Axis Aligner]";
 	SolarRotorKeyword = "[Solar Wing]";
@@ -60,7 +65,8 @@ public void Main(string argument, UpdateType updateSource)
 		Ticker = 0;
 	}
 
-	LightAdjust(cR, cG, cB);
+	InteriorLightAdjust();
+	ReflectorLightAdjust();
 	CleanProductionInventories();
 	SolarAdjust();
 
@@ -68,15 +74,26 @@ public void Main(string argument, UpdateType updateSource)
 
 // ------------------------------------------------------------------------------- Light
 
-void LightAdjust(int R, int G, int B)
+void InteriorLightAdjust()
 {
-	GridTerminalSystem.GetBlocksOfType<IMyInteriorLight>(LightBlocks);
+	GridTerminalSystem.GetBlocksOfType<IMyInteriorLight>(InteriorLightBlocks);
+	LightAdjust(InteriorLightBlocks.Cast<IMyLightingBlock>().ToList(), cR, cG, cB, LightRadius);
+}
 
-	var norm = new Color(R, G, B, 255);
+void ReflectorLightAdjust()
+{
+	GridTerminalSystem.GetBlocksOfType<IMyReflectorLight>(ReflectorLightBlocks);
+	LightAdjust(ReflectorLightBlocks.Cast<IMyLightingBlock>().ToList(), 255, 255, 255, 160);
+}
+
+void LightAdjust(List<IMyLightingBlock> LightBlocks, int R = 255, int G = 255, int B = 255, int LightRadius = 10, int intensity = 5)
+{
+	var color = new Color(R, G, B, 255);
 	for (int i = 0; i < LightBlocks.Count; i++)
 	{
 		LightBlocks[i].Radius = LightRadius;
-		LightBlocks[i].Color = norm;
+		LightBlocks[i].Intensity = intensity;
+		LightBlocks[i].Color = color;
 	}
 }
 
@@ -93,6 +110,7 @@ void CleanProductionInventories()
 
 	CleanAssemblers(ComponentsInventory, MaterialsInventory);
 	CleanRefinerys(MaterialsInventory);
+	CollectAlgaeFarm(MaterialsInventory);
 }
 
 void CleanAssemblers(IMyInventory ComponentsInventory, IMyInventory MaterialsInventory)
@@ -158,6 +176,23 @@ void CleanRefinery(IMyRefinery refinery, IMyInventory MaterialsInventory)
 	{
 		// MoveAllItems(refinery.GetInventory(1), MaterialsInventory);
 		MoveOneItem(refinery.GetInventory(1), MaterialsInventory);
+	}
+}
+
+// ------------------------------------------------------------------------------- Algae
+
+void CollectAlgaeFarm(IMyInventory targetInventory)
+{
+	var algaeFarms = new List<IMyTerminalBlock>();
+	GridTerminalSystem.SearchBlocksOfName(AlgaeFarmKeyword, algaeFarms);
+
+	foreach (var block in algaeFarms)
+	{
+		var inv = block.GetInventory(0);
+		if (inv != null && targetInventory != null)
+		{
+			MoveAllItems(inv, targetInventory);
+		}
 	}
 }
 
