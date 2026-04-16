@@ -11,6 +11,7 @@ string AlgaeFarmKeyword;
 string SolarPointerRCKeyword;
 string SolarRotorKeyword;
 string SolarPanelKeyword;
+string SolarDisplayKeyword;
 int SolarRedirects;
 double Proximity, SolarDirectionSwitch;
 double SolarPowerOutput, SolarPowerOutputPrev;
@@ -24,12 +25,25 @@ List<IMyRefinery> refinerys = new List<IMyRefinery>();
 
 List<MyInventoryItem> items = new List<MyInventoryItem>();
 List<IMyTerminalBlock> L = new List<IMyTerminalBlock>();
+List<IMyTerminalBlock> algaeFarms = new List<IMyTerminalBlock>();
 ////////////////////////////////////// LISTS ///////////////////////////////////
 
+////////////////////////////////////// CACHED BLOCKS ///////////////////////////////////
+IMyTerminalBlock invMatBlock;
+IMyTerminalBlock invCompBlock;
+IMySolarPanel solarPanel;
+IMyMotorStator solarRotor;
+IMyRemoteControl solarController;
+IMyTextSurface solarDisplay;
+////////////////////////////////////// CACHED BLOCKS ///////////////////////////////////
+
 int Ticker;
+const int TickerLimit = 6;
+double[] tickTimes = new double[TickerLimit];
+DateTime tickStart;
 public Program()
 {
-	Runtime.UpdateFrequency = UpdateFrequency.Update100; //| UpdateFrequency.Update10 | UpdateFrequency.Update1
+	Runtime.UpdateFrequency = UpdateFrequency.Update10; //| UpdateFrequency.Update10 | UpdateFrequency.Update1
 	Ticker = 0;
 	// Light -----------------------------------------------------------------------
 	cR = 204;
@@ -46,6 +60,7 @@ public Program()
 	SolarPointerRCKeyword = "[Axis Aligner]";
 	SolarRotorKeyword = "[Solar Wing]";
 	SolarPanelKeyword = "Solar Panel";
+	SolarDisplayKeyword = "[SolarDisplay]";
 	SolarDirectionSwitch = 1;
 	SolarRedirects = 0;
 	Proximity = 0.001;
@@ -55,34 +70,56 @@ public Program()
 
 public void Main(string argument, UpdateType updateSource)
 {
-	if ((updateSource & (UpdateType.Update10)) != 0 && Ticker < 6)
-	{
-		Ticker++;
-		return;
-	}
-	else
-	{
-		Ticker = 0;
-	}
+	if ((updateSource & UpdateType.Update10) == 0) return;
 
-	InteriorLightAdjust();
-	ReflectorLightAdjust();
-	CleanProductionInventories();
-	SolarAdjust();
+	Echo("Tick times (ms):");
+	Echo("  [0] Cache:   " + tickTimes[0].ToString("F2"));
+	Echo("  [1] IntLight:" + tickTimes[1].ToString("F2"));
+	Echo("  [2] RefLight:" + tickTimes[2].ToString("F2"));
+	Echo("  [3] Storage: " + tickTimes[3].ToString("F2"));
+	Echo("  [4] Solar:   " + tickTimes[4].ToString("F2"));
 
+	tickStart = DateTime.Now;
+	switch (Ticker)
+	{
+		case 0: RefreshBlockCache(); break;
+		case 1: InteriorLightAdjust(); break;
+		case 2: ReflectorLightAdjust(); break;
+		case 3: CleanProductionInventories(); break;
+		case 4: SolarAdjust(); break;
+	}
+	tickTimes[Ticker] = (DateTime.Now - tickStart).TotalMilliseconds;
+
+	Ticker = (Ticker + 1) % TickerLimit;
+}
+
+// ------------------------------------------------------------------------------- Cache
+
+void RefreshBlockCache()
+{
+	GridTerminalSystem.GetBlocksOfType<IMyInteriorLight>(InteriorLightBlocks);
+	GridTerminalSystem.GetBlocksOfType<IMyReflectorLight>(ReflectorLightBlocks);
+	GridTerminalSystem.GetBlocksOfType<IMyAssembler>(assemblers);
+	GridTerminalSystem.GetBlocksOfType<IMyRefinery>(refinerys);
+	GridTerminalSystem.SearchBlocksOfName(AlgaeFarmKeyword, algaeFarms);
+	invMatBlock  = BlockNamed(StorageMaterialsKeyword);
+	invCompBlock = BlockNamed(StorageComponentsKeyword);
+	solarPanel      = BlockNamed(SolarPanelKeyword) as IMySolarPanel;
+	solarRotor      = BlockNamed(SolarRotorKeyword) as IMyMotorStator;
+	solarController = BlockNamed(SolarPointerRCKeyword) as IMyRemoteControl;
+	var solarDisplayBlock = BlockNamed(SolarDisplayKeyword) as IMyTextSurfaceProvider;
+	solarDisplay = (solarDisplayBlock != null) ? solarDisplayBlock.GetSurface(0) : null;
 }
 
 // ------------------------------------------------------------------------------- Light
 
 void InteriorLightAdjust()
 {
-	GridTerminalSystem.GetBlocksOfType<IMyInteriorLight>(InteriorLightBlocks);
 	LightAdjust(InteriorLightBlocks.Cast<IMyLightingBlock>().ToList(), cR, cG, cB, LightRadius);
 }
 
 void ReflectorLightAdjust()
 {
-	GridTerminalSystem.GetBlocksOfType<IMyReflectorLight>(ReflectorLightBlocks);
 	LightAdjust(ReflectorLightBlocks.Cast<IMyLightingBlock>().ToList(), 255, 255, 255, 160);
 }
 
@@ -101,12 +138,8 @@ void LightAdjust(List<IMyLightingBlock> LightBlocks, int R = 255, int G = 255, i
 
 void CleanProductionInventories()
 {
-
-	var invMatBock = BlockNamed(StorageMaterialsKeyword);
-	IMyInventory MaterialsInventory = (invMatBock != null) ? invMatBock.GetInventory(0) : null;
-
-	var invCompBock = BlockNamed(StorageComponentsKeyword);
-	IMyInventory ComponentsInventory = (invCompBock != null) ? invCompBock.GetInventory(0) : null;
+	IMyInventory MaterialsInventory = (invMatBlock != null) ? invMatBlock.GetInventory(0) : null;
+	IMyInventory ComponentsInventory = (invCompBlock != null) ? invCompBlock.GetInventory(0) : null;
 
 	CleanAssemblers(ComponentsInventory, MaterialsInventory);
 	CleanRefinerys(MaterialsInventory);
@@ -115,8 +148,6 @@ void CleanProductionInventories()
 
 void CleanAssemblers(IMyInventory ComponentsInventory, IMyInventory MaterialsInventory)
 {
-	GridTerminalSystem.GetBlocksOfType<IMyAssembler>(assemblers);
-
 	for (int i = 0; i < assemblers.Count; i++)
 	{
 		CleanAssembler(assemblers[i] as IMyAssembler, ComponentsInventory, MaterialsInventory);
@@ -160,7 +191,6 @@ void CleanAssembler(IMyAssembler assembler, IMyInventory ComponentsInventory, IM
 
 void CleanRefinerys(IMyInventory MaterialsInventory)
 {
-	GridTerminalSystem.GetBlocksOfType<IMyRefinery>(refinerys);
 	if (refinerys != null && MaterialsInventory != null)
 	{
 		for (int i = 0; i < refinerys.Count; i++)
@@ -183,9 +213,6 @@ void CleanRefinery(IMyRefinery refinery, IMyInventory MaterialsInventory)
 
 void CollectAlgaeFarm(IMyInventory targetInventory)
 {
-	var algaeFarms = new List<IMyTerminalBlock>();
-	GridTerminalSystem.SearchBlocksOfName(AlgaeFarmKeyword, algaeFarms);
-
 	foreach (var block in algaeFarms)
 	{
 		var inv = block.GetInventory(0);
@@ -200,8 +227,8 @@ void CollectAlgaeFarm(IMyInventory targetInventory)
 
 void SolarAdjust()
 {
-	IMySolarPanel solar = BlockNamed(SolarPanelKeyword) as IMySolarPanel;
-	IMyMotorStator rotor = BlockNamed(SolarRotorKeyword) as IMyMotorStator;
+	IMySolarPanel solar = solarPanel;
+	IMyMotorStator rotor = solarRotor;
 
 	SolarConfigureAxisAligner();
 
@@ -211,13 +238,12 @@ void SolarAdjust()
 		SolarPowerOutput = solar.MaxOutput / 0.16;
 		double delta = SolarPowerOutput - SolarPowerOutputPrev;
 
-
-		Echo("Solar Panels");
-		Echo("Power: " + (SolarPowerOutput * 100) + "%");
-		Echo("Delta: " + (delta * 100) + "%");
-
-		Echo("Power Gen.: " + (solar.MaxOutput * 1000) + " kW");
-		Echo("Power Use.: " + (solar.CurrentOutput * 1000) + " kW");
+		var sb = new System.Text.StringBuilder();
+		sb.AppendLine("Solar Panels");
+		sb.AppendLine("Power: " + (SolarPowerOutput * 100) + "%");
+		sb.AppendLine("Delta: " + (delta * 100) + "%");
+		sb.AppendLine("Power Gen.: " + (solar.MaxOutput * 1000) + " kW");
+		sb.AppendLine("Power Use.: " + (solar.CurrentOutput * 1000) + " kW");
 
 		if (delta < 0 && Math.Abs(delta) > 3.0 * Proximity)
 		{
@@ -229,8 +255,8 @@ void SolarAdjust()
 			SolarDirectionSwitch = Math.Sign(SolarDirectionSwitch);
 			SolarRedirects = 1;
 		}
-		Echo("Redirect: " + SolarRedirects);
-		Echo("Switch: " + SolarDirectionSwitch);
+		sb.AppendLine("Redirect: " + SolarRedirects);
+		sb.AppendLine("Switch: " + SolarDirectionSwitch);
 		if (rotor != null)
 		{
 			rotor.BrakingTorque = rotor.Torque;
@@ -245,16 +271,22 @@ void SolarAdjust()
 				SolarDirectionSwitch = Math.Sign(SolarDirectionSwitch);
 			}
 
-			Echo("Angle: " + rotor.Angle + " rad.");
-			Echo("Velocity: " + rotor.TargetVelocityRPM + " RPM");
+			sb.AppendLine("Angle: " + rotor.Angle + " rad.");
+			sb.AppendLine("Velocity: " + rotor.TargetVelocityRPM + " RPM");
 		}
+
+		string solarText = sb.ToString();
+		if (solarDisplay != null)
+			solarDisplay.WriteText(solarText);
+		else
+			Echo(solarText);
 	}
 }
 
 void SolarConfigureAxisAligner()
 {
 	double[] xyz;
-	IMyRemoteControl controller = BlockNamed(SolarPointerRCKeyword) as IMyRemoteControl;
+	IMyRemoteControl controller = solarController;
 
 	if (controller != null)
 	{
