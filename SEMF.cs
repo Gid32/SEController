@@ -29,7 +29,7 @@ List<IMyTerminalBlock> L = new List<IMyTerminalBlock>();
 int Ticker;
 public Program()
 {
-	Runtime.UpdateFrequency = UpdateFrequency.Update10; //| UpdateFrequency.Update100 | UpdateFrequency.Update1
+	Runtime.UpdateFrequency = UpdateFrequency.Update100; //| UpdateFrequency.Update10 | UpdateFrequency.Update1
 	Ticker = 0;
 	// Light -----------------------------------------------------------------------
 	cR = 204;
