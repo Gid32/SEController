@@ -12,6 +12,7 @@ string SolarPointerRCKeyword;
 string SolarRotorKeyword;
 string SolarPanelKeyword;
 string SolarDisplayKeyword;
+int SolarDisplaypanel;
 int SolarRedirects;
 double Proximity, SolarDirectionSwitch;
 double SolarPowerOutput, SolarPowerOutputPrev;
@@ -61,6 +62,7 @@ public Program()
 	SolarRotorKeyword = "[Solar Wing]";
 	SolarPanelKeyword = "Solar Panel";
 	SolarDisplayKeyword = "[SolarDisplay]";
+	SolarDisplaypanel = 0;
 	SolarDirectionSwitch = 1;
 	SolarRedirects = 0;
 	Proximity = 0.001;
@@ -108,7 +110,7 @@ void RefreshBlockCache()
 	solarRotor      = BlockNamed(SolarRotorKeyword) as IMyMotorStator;
 	solarController = BlockNamed(SolarPointerRCKeyword) as IMyRemoteControl;
 	var solarDisplayBlock = BlockNamed(SolarDisplayKeyword) as IMyTextSurfaceProvider;
-	solarDisplay = (solarDisplayBlock != null) ? solarDisplayBlock.GetSurface(0) : null;
+	solarDisplay = (solarDisplayBlock != null) ? solarDisplayBlock.GetSurface(SolarDisplaypanel) : null;
 }
 
 // ------------------------------------------------------------------------------- Light
