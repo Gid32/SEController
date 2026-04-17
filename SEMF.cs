@@ -376,6 +376,7 @@ void SolarConfigureAxisAligner()
 
 void MoveAllItems(IMyInventory source, IMyInventory dest)
 {
+	if (source == null || dest == null) return;
 	items.Clear();
 	source.GetItems(items);
 
@@ -387,8 +388,11 @@ void MoveAllItems(IMyInventory source, IMyInventory dest)
 
 void MoveOneItem(IMyInventory source, IMyInventory dest)
 {
+	if (source == null || dest == null) return;
+	items.Clear();
 	source.GetItems(items);
-  source.TransferItemTo(dest, 0, null, true, null);
+	if (items.Count > 0)
+		source.TransferItemTo(dest, 0, null, true, null);
 }
 
 double[] GetXYZ(IMyTerminalBlock block)
