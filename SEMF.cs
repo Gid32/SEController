@@ -4,12 +4,16 @@ int LightRadius;
 
 string StorageMaterialsKeyword;
 string StorageComponentsKeyword;
+string StorageConsumblesKeyword;
+string StorageAmmoKeyword;
 string StorageMaterialsDisplayKeyword;
 string StorageComponentsDisplayKeyword;
+string StorageConsumblesDisplayKeyword;
+string StorageAmmoDisplayKeyword;
 int StorageMaterialsDisplayPanel;
 int StorageComponentsDisplayPanel;
-
-string AlgaeFarmKeyword;
+int StorageConsumblesDisplayPanel;
+int StorageAmmoDisplayPanel;
 
 string SolarPointerRCKeyword;
 string solarAzimuthRotorKeyword;
@@ -36,25 +40,37 @@ List<IMyMedicalRoom> RefillPoints = new List<IMyMedicalRoom>();
 
 List<MyInventoryItem> items = new List<MyInventoryItem>();
 List<IMySolarPanel> solarPanels = new List<IMySolarPanel>();
-// List<IMySolarFoodGenerator> algaeFarms = new List<IMySolarFoodGenerator>();
-List<IMyTerminalBlock> algaeFarms = new List<IMyTerminalBlock>();
+List<IMyFunctionalBlock> algaeFarms = new List<IMyFunctionalBlock>();
 ////////////////////////////////////// LISTS ///////////////////////////////////
 
 Color interiorLightColor;
 Color reflectorLightColor;
 Color foregroundColor;
 Color backgroundColor;
+const string font = "Monospace";
 
 ////////////////////////////////////// CACHED BLOCKS ///////////////////////////////////
 IMyTerminalBlock invMatBlock;
 IMyTerminalBlock invCompBlock;
+IMyTerminalBlock invConsumblesBlock;
+IMyTerminalBlock invAmmoBlock;
+
+IMyInventory MaterialsInventory;
+IMyInventory ComponentsInventory;
+IMyInventory ConsumblesInventory;
+IMyInventory AmmoInventory;
+
 IMyMotorStator solarAzimuthRotor;
 IMyRemoteControl solarController;
 IMyCameraBlock solarCamera;
 IMyTextSurface solarDisplay;
 IMyTurretControlBlock solarCTC;
+
 IMyTextSurface materialsDisplay;
 IMyTextSurface componentsDisplay;
+IMyTextSurface ConsumblesDisplay;
+IMyTextSurface ammoDisplay;
+
 
 System.Text.StringBuilder _sb = new System.Text.StringBuilder();
 ////////////////////////////////////// CACHED BLOCKS ///////////////////////////////////
@@ -84,8 +100,14 @@ public Program()
 	StorageComponentsKeyword = "[Components]";
 	StorageComponentsDisplayKeyword = "[CompDisplay]";
 	StorageComponentsDisplayPanel = 0;
-	// Algae -----------------------------------------------------------------------
-	AlgaeFarmKeyword = "Algae Farm";
+
+	StorageConsumblesKeyword = "[Consumbles]";
+	StorageConsumblesDisplayKeyword = "[ConsumblesDisplay]";
+	StorageConsumblesDisplayPanel = 1;
+
+  StorageAmmoKeyword = "[Ammo]";
+	StorageAmmoDisplayKeyword = "[AmmoDisplay]";
+	StorageAmmoDisplayPanel = 2;
 	// Solar -----------------------------------------------------------------------
 	SolarPointerRCKeyword = "[Axis Aligner]";
 	solarAzimuthRotorKeyword = "[Solar Wing]";
@@ -111,10 +133,10 @@ public void Main(string argument, UpdateType updateSource)
 	switch (Ticker)
 	{
 		case 0: RefreshBlockCache(); break;
-		case 1: InteriorLightAdjust(); break;
-		case 2: ReflectorLightAdjust(); break;
-		case 3: SolarAdjust(); DisplayClocks(); break;
-		case 4: CleanProductionInventories(); break;
+		case 1: InteriorLightAdjust();  CleanAssemblers(); break;
+		case 2: ReflectorLightAdjust(); CleanRefinerys(); break;
+		case 3: SolarAdjust(); 					CleanAlgaeFarms(); break;
+		case 4: DisplayClocks(); 				SortComponents();/*CleanProductionInventories();*/ break;
 		case 5: DisplayStorageContents(); break;
 	}
 	tickTimes[Ticker] = (DateTime.Now - tickStart).TotalMilliseconds;
@@ -130,14 +152,15 @@ void EchoStats()
 {
 	_sb.Clear();
 	_sb.AppendLine("Execution Time Stats");
-	_sb.AppendLine("[T] Function  ms(max) | instr");
-	_sb.AppendLine(string.Format("[0] Cache:    {0:F0} ({1,3:F0}) | {2}", tickTimes[0], tickMaxTimes[0], tickInstructions[0]));
-	_sb.AppendLine(string.Format("[1] IntLight: {0:F0} ({1,3:F0}) | {2}", tickTimes[1], tickMaxTimes[1], tickInstructions[1]));
-	_sb.AppendLine(string.Format("[2] RefLight: {0:F0} ({1,3:F0}) | {2}", tickTimes[2], tickMaxTimes[2], tickInstructions[2]));
-	_sb.AppendLine(string.Format("[3] Solar:    {0:F0} ({1,3:F0}) | {2}", tickTimes[3], tickMaxTimes[3], tickInstructions[3]));
-	_sb.AppendLine(string.Format("[4] ProdClean:{0:F0} ({1,3:F0}) | {2}", tickTimes[4], tickMaxTimes[4], tickInstructions[4]));
-	_sb.AppendLine(string.Format("[5] Storage:  {0:F0} ({1,3:F0}) | {2}", tickTimes[5], tickMaxTimes[5], tickInstructions[5]));
+	_sb.AppendLine("[T]   ms(max) | instr");
+	_sb.AppendLine(string.Format("[0]: {0:F0} ({1,3:F0}) | {2}", tickTimes[0], tickMaxTimes[0], tickInstructions[0]));
+	_sb.AppendLine(string.Format("[1]: {0:F0} ({1,3:F0}) | {2}", tickTimes[1], tickMaxTimes[1], tickInstructions[1]));
+	_sb.AppendLine(string.Format("[2]: {0:F0} ({1,3:F0}) | {2}", tickTimes[2], tickMaxTimes[2], tickInstructions[2]));
+	_sb.AppendLine(string.Format("[3]: {0:F0} ({1,3:F0}) | {2}", tickTimes[3], tickMaxTimes[3], tickInstructions[3]));
+	_sb.AppendLine(string.Format("[4]: {0:F0} ({1,3:F0}) | {2}", tickTimes[4], tickMaxTimes[4], tickInstructions[4]));
+	_sb.AppendLine(string.Format("[5]: {0:F0} ({1,3:F0}) | {2}", tickTimes[5], tickMaxTimes[5], tickInstructions[5]));
 	_sb.AppendLine(string.Format("Tick: {0}", Ticker));
+
 	string text = _sb.ToString();
 	Echo(text);
 	Me.GetSurface(0).WriteText(text);
@@ -149,9 +172,6 @@ void RefreshBlockCache()
 	GridTerminalSystem.GetBlocksOfType<IMyAssembler>(assemblers);
 	GridTerminalSystem.GetBlocksOfType<IMySolarPanel>(solarPanels);
 	GridTerminalSystem.GetBlocksOfType<IMyMedicalRoom>(RefillPoints);
-	
-	//GridTerminalSystem.GetBlocksOfType<IMySolarFoodGenerator>(algaeFarms);
-	GridTerminalSystem.SearchBlocksOfName(AlgaeFarmKeyword, algaeFarms);
 
 	GridTerminalSystem.GetBlocksOfType<IMyInteriorLight>(InteriorLightBlocks);
 	GridTerminalSystem.GetBlocksOfType<IMyReflectorLight>(ReflectorLightBlocks);
@@ -163,6 +183,14 @@ void RefreshBlockCache()
 
 	invMatBlock        = BlockNamed(StorageMaterialsKeyword);
 	invCompBlock       = BlockNamed(StorageComponentsKeyword);
+	invConsumblesBlock = BlockNamed(StorageConsumblesKeyword);
+	invAmmoBlock       = BlockNamed(StorageAmmoKeyword);
+
+	MaterialsInventory 	= (invMatBlock != null) ? invMatBlock.GetInventory(0) : null;
+	ComponentsInventory = (invCompBlock != null) ? invCompBlock.GetInventory(0) : null;
+	ConsumblesInventory = (invConsumblesBlock != null) ? invConsumblesBlock.GetInventory(0) : null;
+	AmmoInventory 			= (invAmmoBlock != null) ? invAmmoBlock.GetInventory(0) : null;
+
 	solarAzimuthRotor  = BlockNamed(solarAzimuthRotorKeyword) as IMyMotorStator;
 	solarController    = BlockNamed(SolarPointerRCKeyword) as IMyRemoteControl;
 	solarCTC           = BlockNamed(SolarCTCKeyword) as IMyTurretControlBlock;
@@ -171,6 +199,10 @@ void RefreshBlockCache()
 	solarDisplay       = GetTextSurface(BlockNamed(SolarDisplayKeyword) as IMyTextSurfaceProvider, SolarDisplaypanel);
 	materialsDisplay   = GetTextSurface(BlockNamed(StorageMaterialsDisplayKeyword) as IMyTextSurfaceProvider, StorageMaterialsDisplayPanel);
 	componentsDisplay  = GetTextSurface(BlockNamed(StorageComponentsDisplayKeyword) as IMyTextSurfaceProvider, StorageComponentsDisplayPanel);
+	ConsumblesDisplay  = GetTextSurface(BlockNamed(StorageConsumblesDisplayKeyword) as IMyTextSurfaceProvider, StorageConsumblesDisplayPanel);
+	ammoDisplay        = GetTextSurface(BlockNamed(StorageAmmoDisplayKeyword) as IMyTextSurfaceProvider, StorageAmmoDisplayPanel);
+	
+	GridTerminalSystem.GetBlocksOfType<IMyFunctionalBlock>(algaeFarms, block => block.BlockDefinition.SubtypeId == "LargeBlockAlgaeFarm");
 }
 IMyTextSurface GetTextSurface(IMyTextSurfaceProvider DisplayBlock, int panel = 0)
 {
@@ -217,21 +249,36 @@ void DisplayStorageContents()
 {
   DisplayStoredMaterials();
 	DisplayStoredComponents();
+	DisplayStoredConsumbles();
+	DisplayStoredAmmo();
 }
 void DisplayStoredComponents()
 {
-	if (invCompBlock == null) return;
-	DisplayStored(invCompBlock.GetInventory(0), componentsDisplay, "== Components ==");
+	if (ComponentsInventory == null || componentsDisplay == null) return;
+	DisplayStored(ComponentsInventory, componentsDisplay, "== Components ==");
 }
 void DisplayStoredMaterials()
 {
-	if (invMatBlock == null) return;
-	DisplayStored(invMatBlock.GetInventory(0), materialsDisplay, "== Materials ==", "{0,-15}: {1,13:N2}");
+	if (MaterialsInventory == null || materialsDisplay == null) return;
+	DisplayStored(MaterialsInventory, materialsDisplay, "== Materials ==", "{0,-15}: {1,13:N2}");
+}
+void DisplayStoredConsumbles()
+{
+	if (ConsumblesInventory == null || ConsumblesDisplay == null) return;
+	DisplayStored(ConsumblesInventory, ConsumblesDisplay, "== Consumbles ==");
+}
+void DisplayStoredAmmo()
+{
+	if (AmmoInventory == null || ammoDisplay == null) return;
+	DisplayStored(AmmoInventory, ammoDisplay, "== Ammo ==");
 }
 void DisplayStored(IMyInventory inventory, IMyTextSurface display, string title, string format = "{0,-20}: {1,6:N0}")
 {
 	if (inventory != null && display != null)
 	{
+		display.Font = font;
+		display.FontColor = foregroundColor;
+		display.BackgroundColor = backgroundColor;
 		items.Clear();
 		_sb.Clear();
 		_sb.AppendLine(title);
@@ -245,21 +292,19 @@ void DisplayStored(IMyInventory inventory, IMyTextSurface display, string title,
 // ------------------------------------------------------------------------------- Production
 void CleanProductionInventories()
 {
-	IMyInventory MaterialsInventory = (invMatBlock != null) ? invMatBlock.GetInventory(0) : null;
-	IMyInventory ComponentsInventory = (invCompBlock != null) ? invCompBlock.GetInventory(0) : null;
-
-	CleanAssemblers(ComponentsInventory, MaterialsInventory);
-	CleanRefinerys(MaterialsInventory);
-	CollectAlgaeFarm(MaterialsInventory);
+	CleanAssemblers();
+	CleanRefinerys();
+	CleanAlgaeFarms();
 }
-void CleanAssemblers(IMyInventory ComponentsInventory, IMyInventory MaterialsInventory)
+void CleanAssemblers()
 {
+	if (ComponentsInventory == null || MaterialsInventory == null) return;
 	for (int i = 0; i < assemblers.Count; i++)
 	{
-		CleanAssembler(assemblers[i] as IMyAssembler, ComponentsInventory, MaterialsInventory);
+		CleanAssembler(assemblers[i] as IMyAssembler);
 	}
 }
-void CleanAssembler(IMyAssembler assembler, IMyInventory ComponentsInventory, IMyInventory MaterialsInventory)
+void CleanAssembler(IMyAssembler assembler)
 {
 	if (assembler != null)
 	{
@@ -293,17 +338,17 @@ void CleanAssembler(IMyAssembler assembler, IMyInventory ComponentsInventory, IM
 		}
 	}
 }
-void CleanRefinerys(IMyInventory MaterialsInventory)
+void CleanRefinerys()
 {
 	if (refinerys != null && MaterialsInventory != null)
 	{
 		for (int i = 0; i < refinerys.Count; i++)
 		{
-			CleanRefinery(refinerys[i] as IMyRefinery, MaterialsInventory);
+			CleanRefinery(refinerys[i] as IMyRefinery);
 		}
 	}
 }
-void CleanRefinery(IMyRefinery refinery, IMyInventory MaterialsInventory)
+void CleanRefinery(IMyRefinery refinery)
 {
 	if (refinery != null)
 	{
@@ -311,15 +356,37 @@ void CleanRefinery(IMyRefinery refinery, IMyInventory MaterialsInventory)
 		MoveOneItem(refinery.GetInventory(1), MaterialsInventory);
 	}
 }
-// ------------------------------------------------------------------------------- Algae
-void CollectAlgaeFarm(IMyInventory targetInventory)
+void CleanAlgaeFarms()
 {
 	foreach (var block in algaeFarms)
 	{
-		var inv = block.GetInventory(0);
-		if (inv != null && targetInventory != null)
+		CleanAlgaeFarm(block);
+	}
+}
+void CleanAlgaeFarm(IMyFunctionalBlock algaeFarm)
+{
+	if (algaeFarm == null || ConsumblesInventory == null) return;
+	MoveOneItem(algaeFarm.GetInventory(0), ConsumblesInventory);
+}
+
+void SortComponents()
+{
+	items.Clear();
+	ComponentsInventory.GetItems(items);
+
+	for (int i = items.Count - 1; i >= 0; i--)
+	{
+		switch (items[i].Type.TypeId.Split('_')[1])
 		{
-			MoveOneItem(inv, targetInventory);
+			case "Ingot":
+			case "Ore":
+			  MoveOneItem(ComponentsInventory, MaterialsInventory, i);	break;
+			case "SeedItem":
+			case "ConsumableItem":
+			  MoveOneItem(ComponentsInventory, ConsumblesInventory, i);	break;
+			case "PhysicalGunObject":
+			case "AmmoMagazine":
+			  MoveOneItem(ComponentsInventory, AmmoInventory, i);			  break;
 		}
 	}
 }
@@ -422,13 +489,13 @@ void MoveAllItems(IMyInventory source, IMyInventory dest)
 		source.TransferItemTo(dest, i, null, true, null);
 	}
 }
-void MoveOneItem(IMyInventory source, IMyInventory dest)
+void MoveOneItem(IMyInventory source, IMyInventory dest, int index = 0)
 {
 	if (source == null || dest == null) return;
 	items.Clear();
 	source.GetItems(items);
 	if (items.Count > 0)
-		source.TransferItemTo(dest, 0, null, true, null);
+		source.TransferItemTo(dest, index, null, true, null);
 }
 double[] GetXYZ(IMyTerminalBlock block)
 {
