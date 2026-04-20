@@ -35,6 +35,8 @@ List<IMyLightingBlock> reflectorLightsCast = new List<IMyLightingBlock>();
 
 List<IMyAssembler> assemblers = new List<IMyAssembler>();
 List<IMyRefinery> refinerys = new List<IMyRefinery>();
+// Maps inventory item SubtypeId -> blueprint SubtypeId for ammo items whose names differ
+Dictionary<string, string> ammoBlueprintMap = new Dictionary<string, string>();
 
 List<IMyMedicalRoom> RefillPoints = new List<IMyMedicalRoom>();
 
@@ -119,6 +121,21 @@ public Program()
 	SolarDirectionSwitch = 1;
 	SolarRedirects = 0;
 	Proximity = 0.001;
+	// Ammo: item SubtypeId -> blueprint SubtypeId
+	ammoBlueprintMap["SemiAutoPistolMagazine"]              = "Position0010_SemiAutoPistolMagazine";
+	ammoBlueprintMap["FullAutoPistolMagazine"]              = "Position0020_FullAutoPistolMagazine";
+	ammoBlueprintMap["ElitePistolMagazine"]                 = "Position0030_ElitePistolMagazine";
+	ammoBlueprintMap["AutomaticRifleGun_Mag_20rd"]          = "Position0040_AutomaticRifleGun_Mag_20rd";
+	ammoBlueprintMap["RapidFireAutomaticRifleGun_Mag_50rd"] = "Position0050_RapidFireAutomaticRifleGun_Mag_50rd";
+	ammoBlueprintMap["PreciseAutomaticRifleGun_Mag_5rd"]    = "Position0060_PreciseAutomaticRifleGun_Mag_5rd";
+	ammoBlueprintMap["UltimateAutomaticRifleGun_Mag_30rd"]  = "Position0070_UltimateAutomaticRifleGun_Mag_30rd";
+	ammoBlueprintMap["NATO_25x184mm"]                       = "Position0080_NATO_25x184mmMagazine";
+	ammoBlueprintMap["AutocannonClip"]                      = "Position0090_AutocannonClip";
+	ammoBlueprintMap["Missile200mm"]                        = "Position0100_Missile200mm";
+	ammoBlueprintMap["MediumCalibreAmmo"]                   = "Position0110_MediumCalibreAmmo";
+	ammoBlueprintMap["LargeCalibreAmmo"]                    = "Position0120_LargeCalibreAmmo";
+	ammoBlueprintMap["SmallRailgunAmmo"]                    = "Position0130_SmallRailgunAmmo";
+	ammoBlueprintMap["LargeRailgunAmmo"]                    = "Position0140_LargeRailgunAmmo";
 }
 
 //public void Save(){}
@@ -134,9 +151,9 @@ public void Main(string argument, UpdateType updateSource)
 	{
 		case 0: RefreshBlockCache(); break;
 		case 1: InteriorLightAdjust();  CleanAssemblers(); break;
-		case 2: ReflectorLightAdjust(); CleanRefinerys(); break;
-		case 3: SolarAdjust(); 					CleanAlgaeFarms(); break;
-		case 4: DisplayClocks(); 				SortComponents();/*CleanProductionInventories();*/ break;
+		case 2: ReflectorLightAdjust(); SortComponents();	CleanRefinerys(); break;
+		case 3: DisplayClocks(); 		SolarAdjust();		CleanAlgaeFarms(); break;
+		case 4: ProcessAssemblerQueue(invAmmoBlock); ProcessAssemblerQueue(invCompBlock); break;
 		case 5: DisplayStorageContents(); break;
 	}
 	tickTimes[Ticker] = (DateTime.Now - tickStart).TotalMilliseconds;
@@ -270,7 +287,7 @@ void DisplayStoredConsumbles()
 void DisplayStoredAmmo()
 {
 	if (AmmoInventory == null || ammoDisplay == null) return;
-	DisplayStored(AmmoInventory, ammoDisplay, "== Ammo ==");
+	DisplayStored(AmmoInventory, ammoDisplay, "== Ammo ==","{0,-35}: {1,4:N0}");
 }
 void DisplayStored(IMyInventory inventory, IMyTextSurface display, string title, string format = "{0,-20}: {1,6:N0}")
 {
@@ -285,8 +302,20 @@ void DisplayStored(IMyInventory inventory, IMyTextSurface display, string title,
 		inventory.GetItems(items);
 		items.Sort((a, b) => ((double)b.Amount).CompareTo((double)a.Amount));
 		for (int i = 0; i < items.Count; i++)
-			_sb.AppendLine(string.Format(format, items[i].Type.TypeId.Contains("Ore") ? items[i].Type.SubtypeId + " Ore" : items[i].Type.SubtypeId, (double)items[i].Amount));
+			_sb.AppendLine(string.Format(format, FormatTypeId(items[i]), (double)items[i].Amount));
 		display.WriteText(_sb);
+	}
+}
+string FormatTypeId(MyInventoryItem item)
+{
+	switch (item.Type.TypeId.Split('_')[1])
+	{
+		case "Ore":
+			return "Ore " + item.Type.SubtypeId;
+		case "SeedItem":
+			return "Seed " + item.Type.SubtypeId;
+		default:
+			return item.Type.SubtypeId;
 	}
 }
 // ------------------------------------------------------------------------------- Production
@@ -311,28 +340,25 @@ void CleanAssembler(IMyAssembler assembler)
 		IMyInventory source, result, sourceStorage, resultStorage;
 		if (assembler.Mode == MyAssemblerMode.Assembly)
 		{
-			source = assembler.GetInventory(0);
+			source = assembler.InputInventory;
+			result = assembler.OutputInventory;
 			sourceStorage = MaterialsInventory;
-
-			result = assembler.GetInventory(1);
 			resultStorage = ComponentsInventory;
 		}
 		else
 		{
-			source = assembler.GetInventory(1);
+			source = assembler.OutputInventory;
+			result = assembler.InputInventory;
 			sourceStorage = ComponentsInventory;
-
-			result = assembler.GetInventory(0);
 			resultStorage = MaterialsInventory;
 		}
-
 
 		if (resultStorage != null)
 		{
 			MoveOneItem(result, resultStorage);
 		}
 
-		if (!assembler.IsProducing && sourceStorage != null)
+		if (sourceStorage != null && !assembler.IsProducing && assembler.IsQueueEmpty)
 		{
 			MoveOneItem(source, sourceStorage);
 		}
@@ -368,7 +394,6 @@ void CleanAlgaeFarm(IMyFunctionalBlock algaeFarm)
 	if (algaeFarm == null || ConsumblesInventory == null) return;
 	MoveOneItem(algaeFarm.GetInventory(0), ConsumblesInventory);
 }
-
 void SortComponents()
 {
 	items.Clear();
@@ -388,6 +413,90 @@ void SortComponents()
 			case "AmmoMagazine":
 			  MoveOneItem(ComponentsInventory, AmmoInventory, i);			  break;
 		}
+	}
+}
+// ------------------------------------------------------------------------------- Storage Queue
+void ProcessAssemblerQueue(IMyTerminalBlock storageBlock)
+{
+	bool exit = false;
+	IMyAssembler target = null;
+	string customData;
+
+	if (storageBlock == null) return;
+	IMyInventory inventory = storageBlock.GetInventory(0);
+	if (inventory == null) return;
+	items.Clear();
+	inventory.GetItems(items);
+	customData = storageBlock.CustomData;
+	// --- Fill mode: CustomData is empty, snapshot current inventory as baseline ---
+	if (string.IsNullOrEmpty(customData.Trim()))
+	{
+	_sb.Clear();
+	for (int i = 0; i < items.Count; i++)
+		_sb.AppendLine(string.Format("{0}: {1}", items[i].Type.SubtypeId, (double)items[i].Amount));
+	storageBlock.CustomData = _sb.ToString();
+	return;
+	}
+
+	if (assemblers.Count == 0) return;
+	// --- Assembler check: exit if any assembler is currently producing ---
+	for (int i = 0; i < assemblers.Count; i++)
+	{
+	if(assemblers[i].DefinitionDisplayNameText.Contains("Survival Kit")) continue;
+	if(assemblers[i].DefinitionDisplayNameText.Contains("Food Processor")) continue;
+
+	if (target == null && assemblers[i].Mode == MyAssemblerMode.Assembly && !assemblers[i].CooperativeMode) 
+	{
+		target = assemblers[i];
+		if (Me.CustomData == "getasmqueue")
+		{
+			Me.CustomData = "";
+			List<MyProductionItem> items = new List<MyProductionItem>();
+			target.GetQueue(items);
+			foreach (var item in items)
+			{
+				Me.CustomData += string.Format("{1}: {0}\n", item.Amount, item.BlueprintId.ToString().Split('/')[1]);
+			}
+		}
+		exit = target.IsProducing || !target.IsQueueEmpty;
+	}
+	else if (!exit && assemblers[i].CooperativeMode && (assemblers[i].IsProducing || !assemblers[i].IsQueueEmpty))exit = true;
+	}
+	if (target == null || exit) return;
+	// --- Queue mode: parse CustomData as "TypeId/SubtypeId: amount" pairs ---
+	var requested = new Dictionary<string, double>();
+	string[] lines = customData.Split('\n');
+	for (int i = 0; i < lines.Length; i++)
+	{
+		string trimmed = lines[i].Trim();
+		if (string.IsNullOrEmpty(trimmed)) continue;
+		int colonIdx = trimmed.IndexOf(':');
+		if (colonIdx < 0) continue;
+		string key = trimmed.Substring(0, colonIdx).Trim();
+		double amount;
+		if (!double.TryParse(trimmed.Substring(colonIdx + 1).Trim(), out amount)) continue;
+		requested[key] = amount;
+	}
+
+	// Build present-amount lookup from current inventory (keyed by item SubtypeId)
+	var present = new Dictionary<string, double>();
+	for (int i = 0; i < items.Count; i++)
+		present[items[i].Type.SubtypeId] = (double)items[i].Amount;
+	// --- Queue deficit amounts (requested - present) ---
+	foreach (var kvp in requested)
+	{
+		double have = 0;
+		present.TryGetValue(kvp.Key, out have);
+		double diff = kvp.Value - have;
+		if (diff <= 0) continue;
+
+		// Resolve blueprint name: use map for ammo, fall back to SubtypeId for components
+		string blueprintSubtype;
+		if (!ammoBlueprintMap.TryGetValue(kvp.Key, out blueprintSubtype))
+			blueprintSubtype = kvp.Key;
+		MyDefinitionId blueprintId = MyDefinitionId.Parse("MyObjectBuilder_BlueprintDefinition/" + blueprintSubtype);
+		if (target.CanUseBlueprint(blueprintId))
+			target.AddQueueItem(blueprintId, (MyFixedPoint)diff);
 	}
 }
 // ------------------------------------------------------------------------------- Solar
