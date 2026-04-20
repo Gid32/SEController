@@ -35,8 +35,8 @@ List<IMyLightingBlock> reflectorLightsCast = new List<IMyLightingBlock>();
 
 List<IMyAssembler> assemblers = new List<IMyAssembler>();
 List<IMyRefinery> refinerys = new List<IMyRefinery>();
-// Maps inventory item SubtypeId -> blueprint SubtypeId for ammo items whose names differ
-Dictionary<string, string> ammoBlueprintMap = new Dictionary<string, string>();
+// Maps inventory item SubtypeId -> blueprint SubtypeId for assembler items whose names differ
+Dictionary<string, string> assemblerBlueprintMap = new Dictionary<string, string>();
 
 List<IMyMedicalRoom> RefillPoints = new List<IMyMedicalRoom>();
 
@@ -44,13 +44,11 @@ List<MyInventoryItem> items = new List<MyInventoryItem>();
 List<IMySolarPanel> solarPanels = new List<IMySolarPanel>();
 List<IMyFunctionalBlock> algaeFarms = new List<IMyFunctionalBlock>();
 ////////////////////////////////////// LISTS ///////////////////////////////////
-
 Color interiorLightColor;
 Color reflectorLightColor;
 Color foregroundColor;
 Color backgroundColor;
 const string font = "Monospace";
-
 ////////////////////////////////////// CACHED BLOCKS ///////////////////////////////////
 IMyTerminalBlock invMatBlock;
 IMyTerminalBlock invCompBlock;
@@ -73,10 +71,8 @@ IMyTextSurface componentsDisplay;
 IMyTextSurface ConsumblesDisplay;
 IMyTextSurface ammoDisplay;
 
-
 System.Text.StringBuilder _sb = new System.Text.StringBuilder();
 ////////////////////////////////////// CACHED BLOCKS ///////////////////////////////////
-
 int Ticker;
 const int TickerLimit = 6;
 double[] tickTimes = new double[TickerLimit];
@@ -121,25 +117,10 @@ public Program()
 	SolarDirectionSwitch = 1;
 	SolarRedirects = 0;
 	Proximity = 0.001;
-	// Ammo: item SubtypeId -> blueprint SubtypeId
-	ammoBlueprintMap["SemiAutoPistolMagazine"]              = "Position0010_SemiAutoPistolMagazine";
-	ammoBlueprintMap["FullAutoPistolMagazine"]              = "Position0020_FullAutoPistolMagazine";
-	ammoBlueprintMap["ElitePistolMagazine"]                 = "Position0030_ElitePistolMagazine";
-	ammoBlueprintMap["AutomaticRifleGun_Mag_20rd"]          = "Position0040_AutomaticRifleGun_Mag_20rd";
-	ammoBlueprintMap["RapidFireAutomaticRifleGun_Mag_50rd"] = "Position0050_RapidFireAutomaticRifleGun_Mag_50rd";
-	ammoBlueprintMap["PreciseAutomaticRifleGun_Mag_5rd"]    = "Position0060_PreciseAutomaticRifleGun_Mag_5rd";
-	ammoBlueprintMap["UltimateAutomaticRifleGun_Mag_30rd"]  = "Position0070_UltimateAutomaticRifleGun_Mag_30rd";
-	ammoBlueprintMap["NATO_25x184mm"]                       = "Position0080_NATO_25x184mmMagazine";
-	ammoBlueprintMap["AutocannonClip"]                      = "Position0090_AutocannonClip";
-	ammoBlueprintMap["Missile200mm"]                        = "Position0100_Missile200mm";
-	ammoBlueprintMap["MediumCalibreAmmo"]                   = "Position0110_MediumCalibreAmmo";
-	ammoBlueprintMap["LargeCalibreAmmo"]                    = "Position0120_LargeCalibreAmmo";
-	ammoBlueprintMap["SmallRailgunAmmo"]                    = "Position0130_SmallRailgunAmmo";
-	ammoBlueprintMap["LargeRailgunAmmo"]                    = "Position0140_LargeRailgunAmmo";
+
+	BlueprintMapFill();
 }
-
 //public void Save(){}
-
 public void Main(string argument, UpdateType updateSource)
 {
 	if ((updateSource & UpdateType.Update10) == 0) return;
@@ -163,7 +144,6 @@ public void Main(string argument, UpdateType updateSource)
 	Ticker = (Ticker + 1) % TickerLimit;
 
 }
-
 // ------------------------------------------------------------------------------- Cache
 void EchoStats()
 {
@@ -310,12 +290,9 @@ string FormatTypeId(MyInventoryItem item)
 {
 	switch (item.Type.TypeId.Split('_')[1])
 	{
-		case "Ore":
-			return "Ore " + item.Type.SubtypeId;
-		case "SeedItem":
-			return "Seed " + item.Type.SubtypeId;
-		default:
-			return item.Type.SubtypeId;
+		case "Ore": 			return "Ore " + item.Type.SubtypeId;
+		case "SeedItem": 	return "Seed " + item.Type.SubtypeId;
+		default: 					return item.Type.SubtypeId;
 	}
 }
 // ------------------------------------------------------------------------------- Production
@@ -335,34 +312,29 @@ void CleanAssemblers()
 }
 void CleanAssembler(IMyAssembler assembler)
 {
-	if (assembler != null)
+	if (assembler == null) return;
+	IMyInventory source, result, sourceStorage, resultStorage;
+	if (assembler.Mode == MyAssemblerMode.Assembly)
 	{
-		IMyInventory source, result, sourceStorage, resultStorage;
-		if (assembler.Mode == MyAssemblerMode.Assembly)
-		{
-			source = assembler.InputInventory;
-			result = assembler.OutputInventory;
-			sourceStorage = MaterialsInventory;
-			resultStorage = ComponentsInventory;
-		}
-		else
-		{
-			source = assembler.OutputInventory;
-			result = assembler.InputInventory;
-			sourceStorage = ComponentsInventory;
-			resultStorage = MaterialsInventory;
-		}
-
-		if (resultStorage != null)
-		{
-			MoveOneItem(result, resultStorage);
-		}
-
-		if (sourceStorage != null && !assembler.IsProducing && assembler.IsQueueEmpty)
-		{
-			MoveOneItem(source, sourceStorage);
-		}
+		source = assembler.InputInventory;
+		result = assembler.OutputInventory;
+		sourceStorage = MaterialsInventory;
+		resultStorage = ComponentsInventory;
 	}
+	else
+	{
+		source = assembler.OutputInventory;
+		result = assembler.InputInventory;
+		sourceStorage = ComponentsInventory;
+		resultStorage = MaterialsInventory;
+	}
+
+	if (source == null || result == null || sourceStorage == null || resultStorage == null) return;
+
+	if (assembler.IsProducing) MoveOneItem(result, resultStorage);
+	else MoveAllItems(result, resultStorage);
+
+	if (!assembler.IsProducing && assembler.IsQueueEmpty) MoveAllItems(source, sourceStorage);
 }
 void CleanRefinerys()
 {
@@ -376,11 +348,10 @@ void CleanRefinerys()
 }
 void CleanRefinery(IMyRefinery refinery)
 {
-	if (refinery != null)
-	{
-		// MoveAllItems(refinery.GetInventory(1), MaterialsInventory);
-		MoveOneItem(refinery.GetInventory(1), MaterialsInventory);
-	}
+	if (refinery == null) return;
+	if (refinery.IsProducing)MoveOneItem(refinery.GetInventory(1), MaterialsInventory);
+	else MoveAllItems(refinery.GetInventory(1), MaterialsInventory);
+
 }
 void CleanAlgaeFarms()
 {
@@ -492,7 +463,7 @@ void ProcessAssemblerQueue(IMyTerminalBlock storageBlock)
 
 		// Resolve blueprint name: use map for ammo, fall back to SubtypeId for components
 		string blueprintSubtype;
-		if (!ammoBlueprintMap.TryGetValue(kvp.Key, out blueprintSubtype))
+		if (!assemblerBlueprintMap.TryGetValue(kvp.Key, out blueprintSubtype))
 			blueprintSubtype = kvp.Key;
 		MyDefinitionId blueprintId = MyDefinitionId.Parse("MyObjectBuilder_BlueprintDefinition/" + blueprintSubtype);
 		if (target.CanUseBlueprint(blueprintId))
@@ -628,6 +599,46 @@ IMyTerminalBlock BlockNamed(String str)
 	L.Clear();
 	L = BlocksNamed(str);
 	return L.Count > 0 ? L[0] : null;
+}
+void BlueprintMapFill()
+{
+	// Assembler: item SubtypeId -> blueprint SubtypeId
+	assemblerBlueprintMap["SemiAutoPistolMagazine"]              = "Position0010_SemiAutoPistolMagazine";
+	assemblerBlueprintMap["FullAutoPistolMagazine"]              = "Position0020_FullAutoPistolMagazine";
+	assemblerBlueprintMap["ElitePistolMagazine"]                 = "Position0030_ElitePistolMagazine";
+	assemblerBlueprintMap["AutomaticRifleGun_Mag_20rd"]          = "Position0040_AutomaticRifleGun_Mag_20rd";
+	assemblerBlueprintMap["RapidFireAutomaticRifleGun_Mag_50rd"] = "Position0050_RapidFireAutomaticRifleGun_Mag_50rd";
+	assemblerBlueprintMap["PreciseAutomaticRifleGun_Mag_5rd"]    = "Position0060_PreciseAutomaticRifleGun_Mag_5rd";
+	assemblerBlueprintMap["UltimateAutomaticRifleGun_Mag_30rd"]  = "Position0070_UltimateAutomaticRifleGun_Mag_30rd";
+	assemblerBlueprintMap["NATO_25x184mm"]                       = "Position0080_NATO_25x184mmMagazine";
+	assemblerBlueprintMap["AutocannonClip"]                      = "Position0090_AutocannonClip";
+	assemblerBlueprintMap["Missile200mm"]                        = "Position0100_Missile200mm";
+	assemblerBlueprintMap["MediumCalibreAmmo"]                   = "Position0110_MediumCalibreAmmo";
+	assemblerBlueprintMap["LargeCalibreAmmo"]                    = "Position0120_LargeCalibreAmmo";
+	assemblerBlueprintMap["SmallRailgunAmmo"]                    = "Position0130_SmallRailgunAmmo";
+	assemblerBlueprintMap["LargeRailgunAmmo"]                    = "Position0140_LargeRailgunAmmo";
+
+	assemblerBlueprintMap["InteriorPlate"]        = "InteriorPlate";
+	assemblerBlueprintMap["SteelPlate"]           = "SteelPlate";
+	assemblerBlueprintMap["Motor"]                = "MotorComponent";
+	assemblerBlueprintMap["Construction"]         = "ConstructionComponent";
+	assemblerBlueprintMap["Computer"]             = "ComputerComponent";
+	assemblerBlueprintMap["MetalGrid"]            = "MetalGrid";
+	assemblerBlueprintMap["Display"]              = "Display";
+	assemblerBlueprintMap["LargeTube"]            = "LargeTube";
+	assemblerBlueprintMap["SmallTube"]            = "SmallTube";
+	assemblerBlueprintMap["BulletproofGlass"]     = "BulletproofGlass";
+	assemblerBlueprintMap["PowerCell"]            = "PowerCell";
+	assemblerBlueprintMap["Girder"]               = "GirderComponent";
+	assemblerBlueprintMap["Superconductor"]       = "Superconductor";
+	assemblerBlueprintMap["Reactor"]              = "ReactorComponent";
+	assemblerBlueprintMap["RadioCommunication"]   = "RadioCommunicationComponent";
+	assemblerBlueprintMap["SolarCell"]            = "SolarCell";
+	assemblerBlueprintMap["Detector"]             = "DetectorComponent";
+	assemblerBlueprintMap["Thrust"]               = "ThrustComponent";
+	assemblerBlueprintMap["Medical"]              = "MedicalComponent";
+	assemblerBlueprintMap["Explosives"]           = "ExplosivesComponent";
+	assemblerBlueprintMap["GravityGenerator"]     = "GravityGeneratorComponent";
 }
 void assert(bool cond, String errormsg)
 {
