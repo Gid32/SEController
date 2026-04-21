@@ -15,6 +15,10 @@ int StorageComponentsDisplayPanel;
 int StorageConsumblesDisplayPanel;
 int StorageAmmoDisplayPanel;
 
+string NavigationCameraKeyword;
+string NavigationDisplayKeyword;
+int NavigationDisplayPanel;
+
 string SolarPointerRCKeyword;
 string solarAzimuthRotorKeyword;
 string SolarDisplayKeyword;
@@ -71,6 +75,9 @@ IMyTextSurface componentsDisplay;
 IMyTextSurface ConsumblesDisplay;
 IMyTextSurface ammoDisplay;
 
+IMyTextSurface NavigationDisplay;
+IMyCameraBlock NavigationCamera;
+
 System.Text.StringBuilder _sb = new System.Text.StringBuilder();
 ////////////////////////////////////// CACHED BLOCKS ///////////////////////////////////
 int Ticker;
@@ -118,11 +125,23 @@ public Program()
 	SolarRedirects = 0;
 	Proximity = 0.001;
 
+	// Navigation -------------------------------------------------------------------
+	NavigationCameraKeyword = "[Scope Camera]";
+	NavigationDisplayKeyword = "[Navigation]";
+	NavigationDisplayPanel = 0;
+
 	BlueprintMapFill();
 }
 //public void Save(){}
 public void Main(string argument, UpdateType updateSource)
 {
+	if (argument.IndexOf("navscan", StringComparison.OrdinalIgnoreCase) >= 0)
+	{
+		int distance = 20000;
+		if (argument.Trim().Split(' ').Length >= 2) int.TryParse(argument.Trim().Split(' ')[1], out distance);
+		AquireTarget(distance);
+		return;
+	}
 	if ((updateSource & UpdateType.Update10) == 0) return;
 
 	EchoStats();
@@ -132,9 +151,21 @@ public void Main(string argument, UpdateType updateSource)
 	{
 		case 0: RefreshBlockCache(); break;
 		case 1: InteriorLightAdjust();  CleanAssemblers(); break;
-		case 2: ReflectorLightAdjust(); SortComponents();	CleanRefinerys(); break;
-		case 3: DisplayClocks(); 		SolarAdjust();		CleanAlgaeFarms(); break;
-		case 4: ProcessAssemblerQueue(invAmmoBlock); ProcessAssemblerQueue(invCompBlock); break;
+		case 2: 
+			ReflectorLightAdjust();
+			SortComponents();
+			CleanRefinerys();
+			break;
+		case 3: 
+			DisplayClocks(); 
+			SolarAdjust();
+			CleanAlgaeFarms();
+			break;
+		case 4: 
+			CleanAssemblers();
+			ProcessAssemblerQueue(invAmmoBlock);
+			ProcessAssemblerQueue(invCompBlock);
+			break;
 		case 5: DisplayStorageContents(); break;
 	}
 	tickTimes[Ticker] = (DateTime.Now - tickStart).TotalMilliseconds;
@@ -193,12 +224,16 @@ void RefreshBlockCache()
 	solarCTC           = BlockNamed(SolarCTCKeyword) as IMyTurretControlBlock;
 	solarCamera        = BlockNamed(SolarCameraKeyword) as IMyCameraBlock;
 
+	NavigationCamera   = BlockNamed(NavigationCameraKeyword) as IMyCameraBlock;
+
 	solarDisplay       = GetTextSurface(BlockNamed(SolarDisplayKeyword) as IMyTextSurfaceProvider, SolarDisplaypanel);
 	materialsDisplay   = GetTextSurface(BlockNamed(StorageMaterialsDisplayKeyword) as IMyTextSurfaceProvider, StorageMaterialsDisplayPanel);
 	componentsDisplay  = GetTextSurface(BlockNamed(StorageComponentsDisplayKeyword) as IMyTextSurfaceProvider, StorageComponentsDisplayPanel);
 	ConsumblesDisplay  = GetTextSurface(BlockNamed(StorageConsumblesDisplayKeyword) as IMyTextSurfaceProvider, StorageConsumblesDisplayPanel);
 	ammoDisplay        = GetTextSurface(BlockNamed(StorageAmmoDisplayKeyword) as IMyTextSurfaceProvider, StorageAmmoDisplayPanel);
-	
+
+	NavigationDisplay  = GetTextSurface(BlockNamed(NavigationDisplayKeyword) as IMyTextSurfaceProvider, NavigationDisplayPanel);
+
 	GridTerminalSystem.GetBlocksOfType<IMyFunctionalBlock>(algaeFarms, block => block.BlockDefinition.SubtypeId == "LargeBlockAlgaeFarm");
 }
 IMyTextSurface GetTextSurface(IMyTextSurfaceProvider DisplayBlock, int panel = 0)
@@ -386,6 +421,47 @@ void SortComponents()
 		}
 	}
 }
+// ------------------------------------------------------------------------------- Navigation
+MyDetectedEntityInfo GetCameraTarget(IMyCameraBlock camera, double distance = 5000)
+{
+	if (!camera.EnableRaycast)
+		camera.EnableRaycast = true;
+	if (camera.CanScan(distance)) return camera.Raycast((float)distance);
+	return new MyDetectedEntityInfo();
+}
+void AquireTarget(int distance)
+{
+	_sb.Clear();
+	_sb.AppendLine("== Navigation ==");
+  if (NavigationCamera == null)
+  {
+    _sb.AppendLine("No camera found: " + NavigationCameraKeyword);
+		WriteToDisplay(NavigationDisplay);
+		return;
+	}
+	
+	MyDetectedEntityInfo info = GetCameraTarget(NavigationCamera, distance);
+	if (info.IsEmpty()) 
+	{
+		_sb.AppendLine("No target in sight");
+	}
+	else
+	{
+	
+    _sb.AppendLine(string.Format("Target:   {0}", info.Name));
+    _sb.AppendLine(string.Format("Type:     {0}", info.Type));
+    _sb.AppendLine(string.Format("Velocity: {0:N2} m/s", info.Velocity.Length()));
+    _sb.AppendLine(string.Format("Distance: {0:N2} m", Vector3D.Distance(NavigationCamera.GetPosition(), info.Position)));
+    _sb.AppendLine(CreateGPS("Target", info.HitPosition));
+      
+    _sb.AppendLine(string.Format("scan range: {0} km", NavigationCamera.AvailableScanRange / 1000));
+    _sb.AppendLine(string.Format("scan cooldown: {0} s", NavigationCamera.TimeUntilScan(20000) / 1000));
+    _sb.AppendLine(string.Format("distance limit: {0}", NavigationCamera.RaycastDistanceLimit));
+    _sb.AppendLine(string.Format("time multiplier: {0}", NavigationCamera.RaycastTimeMultiplier));
+	}
+	
+	WriteToDisplay(NavigationDisplay);
+}
 // ------------------------------------------------------------------------------- Storage Queue
 void ProcessAssemblerQueue(IMyTerminalBlock storageBlock)
 {
@@ -564,9 +640,9 @@ void MoveAllItems(IMyInventory source, IMyInventory dest)
 	items.Clear();
 	source.GetItems(items);
 
-	for (int i = items.Count - 1; i >= 0; i--)
+	for (int i = 0; i < items.Count; i++)
 	{
-		source.TransferItemTo(dest, i, null, true, null);
+		source.TransferItemTo(dest, 0, null, true, null);
 	}
 }
 void MoveOneItem(IMyInventory source, IMyInventory dest, int index = 0)
@@ -576,6 +652,23 @@ void MoveOneItem(IMyInventory source, IMyInventory dest, int index = 0)
 	source.GetItems(items);
 	if (items.Count > 0)
 		source.TransferItemTo(dest, index, null, true, null);
+}
+void MoveGridContentsToInventory(string gridNameSelector, IMyInventory target)
+{
+	//MoveGridContentsToInventory("Miner", MaterialsInventory); 
+	if (target == null) return;
+	var gridBlocks = new List<IMyTerminalBlock>();
+	GridTerminalSystem.GetBlocksOfType<IMyTerminalBlock>(gridBlocks,
+		block => block.CubeGrid.CustomName.Contains(gridNameSelector));
+	for (int i = 0; i < gridBlocks.Count; i++)
+	{
+		for (int j = 0; j < gridBlocks[i].InventoryCount; j++)
+		{
+			IMyInventory source = gridBlocks[i].GetInventory(j);
+			if (source != null && source != target)
+				MoveAllItems(source, target);
+		}
+	}
 }
 double[] GetXYZ(IMyTerminalBlock block)
 {
@@ -643,4 +736,24 @@ void BlueprintMapFill()
 void assert(bool cond, String errormsg)
 {
 	if (!cond) throw new Exception(errormsg);
+}
+string CreateGPS(string name, Vector3D? pos)
+{
+	if (pos == null) return $"GPS:{name}:::::#FF00FF00:";
+	return $"GPS:{name}:{pos.Value.X:F2}:{pos.Value.Y:F2}:{pos.Value.Z:F2}:#FF00FF00:";
+}
+void WriteToDisplay(IMyTextSurface surface = null)
+{
+  if (surface != null)
+  {
+    surface.Font = font;
+    surface.FontColor = foregroundColor;
+    surface.BackgroundColor = backgroundColor;
+    surface.WriteText(_sb);
+  }
+  else
+  {
+    Me.CustomData = _sb.ToString();
+  }
+  Echo(_sb.ToString());
 }
