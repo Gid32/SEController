@@ -110,7 +110,7 @@ public Program()
 	StorageConsumblesDisplayKeyword = "[ConsumblesDisplay]";
 	StorageConsumblesDisplayPanel = 1;
 
-  StorageAmmoKeyword = "[Ammo]";
+	StorageAmmoKeyword = "[Ammo]";
 	StorageAmmoDisplayKeyword = "[AmmoDisplay]";
 	StorageAmmoDisplayPanel = 2;
 	// Solar -----------------------------------------------------------------------
@@ -142,8 +142,14 @@ public void Main(string argument, UpdateType updateSource)
 		AquireTarget(distance);
 		return;
 	}
-	if ((updateSource & UpdateType.Update10) == 0) return;
 
+	if (argument.IndexOf("getasmqueue", StringComparison.OrdinalIgnoreCase) >= 0)
+	{
+		Me.CustomData = "getasmqueue";
+		return;
+	}
+
+	if ((updateSource & UpdateType.Update10) == 0) return;
 	EchoStats();
 
 	tickStart = DateTime.Now;
@@ -447,18 +453,17 @@ void AquireTarget(int distance)
 	}
 	else
 	{
-	
-    _sb.AppendLine(string.Format("Target:   {0}", info.Name));
-    _sb.AppendLine(string.Format("Type:     {0}", info.Type));
-    _sb.AppendLine(string.Format("Velocity: {0:N2} m/s", info.Velocity.Length()));
-    _sb.AppendLine(string.Format("Distance: {0:N2} m", Vector3D.Distance(NavigationCamera.GetPosition(), info.Position)));
-    _sb.AppendLine(CreateGPS("Target", info.HitPosition));
+		_sb.AppendLine(string.Format("Target:   {0}", info.Name));
+		_sb.AppendLine(string.Format("Type:     {0}", info.Type));
+		_sb.AppendLine(string.Format("Velocity: {0:N2} m/s", info.Velocity.Length()));
+		_sb.AppendLine(string.Format("Distance: {0:N2} m", Vector3D.Distance(NavigationCamera.GetPosition(), info.Position)));
+		_sb.AppendLine(CreateGPS("Target", info.HitPosition));
+	}
       
     _sb.AppendLine(string.Format("scan range: {0} km", NavigationCamera.AvailableScanRange / 1000));
     _sb.AppendLine(string.Format("scan cooldown: {0} s", NavigationCamera.TimeUntilScan(20000) / 1000));
     _sb.AppendLine(string.Format("distance limit: {0}", NavigationCamera.RaycastDistanceLimit));
     _sb.AppendLine(string.Format("time multiplier: {0}", NavigationCamera.RaycastTimeMultiplier));
-	}
 	
 	WriteToDisplay(NavigationDisplay);
 }
@@ -696,42 +701,44 @@ IMyTerminalBlock BlockNamed(String str)
 void BlueprintMapFill()
 {
 	// Assembler: item SubtypeId -> blueprint SubtypeId
-	assemblerBlueprintMap["SemiAutoPistolMagazine"]              = "Position0010_SemiAutoPistolMagazine";
-	assemblerBlueprintMap["FullAutoPistolMagazine"]              = "Position0020_FullAutoPistolMagazine";
-	assemblerBlueprintMap["ElitePistolMagazine"]                 = "Position0030_ElitePistolMagazine";
-	assemblerBlueprintMap["AutomaticRifleGun_Mag_20rd"]          = "Position0040_AutomaticRifleGun_Mag_20rd";
-	assemblerBlueprintMap["RapidFireAutomaticRifleGun_Mag_50rd"] = "Position0050_RapidFireAutomaticRifleGun_Mag_50rd";
-	assemblerBlueprintMap["PreciseAutomaticRifleGun_Mag_5rd"]    = "Position0060_PreciseAutomaticRifleGun_Mag_5rd";
-	assemblerBlueprintMap["UltimateAutomaticRifleGun_Mag_30rd"]  = "Position0070_UltimateAutomaticRifleGun_Mag_30rd";
-	assemblerBlueprintMap["NATO_25x184mm"]                       = "Position0080_NATO_25x184mmMagazine";
-	assemblerBlueprintMap["AutocannonClip"]                      = "Position0090_AutocannonClip";
 	assemblerBlueprintMap["Missile200mm"]                        = "Position0100_Missile200mm";
-	assemblerBlueprintMap["MediumCalibreAmmo"]                   = "Position0110_MediumCalibreAmmo";
-	assemblerBlueprintMap["LargeCalibreAmmo"]                    = "Position0120_LargeCalibreAmmo";
+	assemblerBlueprintMap["AutocannonClip"]                      = "Position0090_AutocannonClip";
 	assemblerBlueprintMap["SmallRailgunAmmo"]                    = "Position0130_SmallRailgunAmmo";
 	assemblerBlueprintMap["LargeRailgunAmmo"]                    = "Position0140_LargeRailgunAmmo";
-
-	assemblerBlueprintMap["InteriorPlate"]        = "InteriorPlate";
-	assemblerBlueprintMap["SteelPlate"]           = "SteelPlate";
+	assemblerBlueprintMap["LargeCalibreAmmo"]                    = "Position0120_LargeCalibreAmmo";
+	assemblerBlueprintMap["MediumCalibreAmmo"]                   = "Position0110_MediumCalibreAmmo";
+	assemblerBlueprintMap["ElitePistolMagazine"]                 = "Position0030_ElitePistolMagazine";
+	assemblerBlueprintMap["NATO_25x184mm"]                       = "Position0080_NATO_25x184mmMagazine";
+	assemblerBlueprintMap["SemiAutoPistolMagazine"]              = "Position0010_SemiAutoPistolMagazine";
+	assemblerBlueprintMap["FullAutoPistolMagazine"]              = "Position0020_FullAutoPistolMagazine";
+	assemblerBlueprintMap["AutomaticRifleGun_Mag_20rd"]          = "Position0040_AutomaticRifleGun_Mag_20rd";
+	assemblerBlueprintMap["PreciseAutomaticRifleGun_Mag_5rd"]    = "Position0060_PreciseAutomaticRifleGun_Mag_5rd";
+	assemblerBlueprintMap["UltimateAutomaticRifleGun_Mag_30rd"]  = "Position0070_UltimateAutomaticRifleGun_Mag_30rd";
+	assemblerBlueprintMap["RapidFireAutomaticRifleGun_Mag_50rd"] = "Position0050_RapidFireAutomaticRifleGun_Mag_50rd";
+	// components 
 	assemblerBlueprintMap["Motor"]                = "MotorComponent";
-	assemblerBlueprintMap["Construction"]         = "ConstructionComponent";
-	assemblerBlueprintMap["Computer"]             = "ComputerComponent";
-	assemblerBlueprintMap["MetalGrid"]            = "MetalGrid";
-	assemblerBlueprintMap["Display"]              = "Display";
-	assemblerBlueprintMap["LargeTube"]            = "LargeTube";
-	assemblerBlueprintMap["SmallTube"]            = "SmallTube";
-	assemblerBlueprintMap["BulletproofGlass"]     = "BulletproofGlass";
-	assemblerBlueprintMap["PowerCell"]            = "PowerCell";
 	assemblerBlueprintMap["Girder"]               = "GirderComponent";
-	assemblerBlueprintMap["Superconductor"]       = "Superconductor";
-	assemblerBlueprintMap["Reactor"]              = "ReactorComponent";
-	assemblerBlueprintMap["RadioCommunication"]   = "RadioCommunicationComponent";
-	assemblerBlueprintMap["SolarCell"]            = "SolarCell";
-	assemblerBlueprintMap["Detector"]             = "DetectorComponent";
 	assemblerBlueprintMap["Thrust"]               = "ThrustComponent";
 	assemblerBlueprintMap["Medical"]              = "MedicalComponent";
+	assemblerBlueprintMap["Reactor"]              = "ReactorComponent";
+	assemblerBlueprintMap["Computer"]             = "ComputerComponent";
+	assemblerBlueprintMap["Detector"]             = "DetectorComponent";
 	assemblerBlueprintMap["Explosives"]           = "ExplosivesComponent";
+	assemblerBlueprintMap["Construction"]         = "ConstructionComponent";
 	assemblerBlueprintMap["GravityGenerator"]     = "GravityGeneratorComponent";
+	assemblerBlueprintMap["RadioCommunication"]   = "RadioCommunicationComponent";
+
+
+	// assemblerBlueprintMap["Display"]              = "Display";
+	// assemblerBlueprintMap["PowerCell"]            = "PowerCell";
+	// assemblerBlueprintMap["LargeTube"]            = "LargeTube";
+	// assemblerBlueprintMap["SmallTube"]            = "SmallTube";
+	// assemblerBlueprintMap["MetalGrid"]            = "MetalGrid";
+	// assemblerBlueprintMap["SolarCell"]            = "SolarCell";
+	// assemblerBlueprintMap["SteelPlate"]           = "SteelPlate";
+	// assemblerBlueprintMap["InteriorPlate"]        = "InteriorPlate";
+	// assemblerBlueprintMap["Superconductor"]       = "Superconductor";
+	// assemblerBlueprintMap["BulletproofGlass"]     = "BulletproofGlass";
 }
 void assert(bool cond, String errormsg)
 {
