@@ -81,7 +81,7 @@ IMyCameraBlock NavigationCamera;
 System.Text.StringBuilder _sb = new System.Text.StringBuilder();
 ////////////////////////////////////// CACHED BLOCKS ///////////////////////////////////
 int Ticker;
-const int TickerLimit = 6;
+const int TickerLimit = 12;
 double[] tickTimes = new double[TickerLimit];
 double[] tickMaxTimes = new double[TickerLimit];
 double[] tickInstructions = new double[TickerLimit];
@@ -156,23 +156,17 @@ public void Main(string argument, UpdateType updateSource)
 	switch (Ticker)
 	{
 		case 0: RefreshBlockCache(); break;
-		case 1: InteriorLightAdjust();  CleanAssemblers(); break;
-		case 2: 
-			ReflectorLightAdjust();
-			SortComponents();
-			CleanRefinerys();
-			break;
-		case 3: 
-			DisplayClocks(); 
-			SolarAdjust();
-			CleanAlgaeFarms();
-			break;
-		case 4: 
-			CleanAssemblers();
-			ProcessAssemblerQueue(invAmmoBlock);
-			ProcessAssemblerQueue(invCompBlock);
-			break;
-		case 5: DisplayStorageContents(); break;
+		case 1: CleanAssemblers(); SortComponents(); break;
+		case 2: ProcessAssemblerQueue(invCompBlock); break;
+		case 3: ProcessAssemblerQueue(invAmmoBlock); break;
+		case 4:	DisplayStoredComponents(); break;
+		case 5: DisplayStoredConsumbles(); break;
+		case 6: DisplayStoredAmmo(); break;
+		case 7: CleanAlgaeFarms(); CleanRefinerys(); break;
+		case 8: DisplayStoredMaterials(); break;
+		case 9: InteriorLightAdjust(); ReflectorLightAdjust(); break;
+		case 10: SolarAdjust(); break;
+		case 11: DisplayClocks(); break;
 	}
 	tickTimes[Ticker] = (DateTime.Now - tickStart).TotalMilliseconds;
 	tickMaxTimes[Ticker] = Math.Max(tickTimes[Ticker], tickMaxTimes[Ticker]);
@@ -186,13 +180,9 @@ void EchoStats()
 {
 	_sb.Clear();
 	_sb.AppendLine("Execution Time Stats");
-	_sb.AppendLine("[T]   ms(max) | instr");
-	_sb.AppendLine(string.Format("[0]: {0:F0} ({1,3:F0}) | {2}", tickTimes[0], tickMaxTimes[0], tickInstructions[0]));
-	_sb.AppendLine(string.Format("[1]: {0:F0} ({1,3:F0}) | {2}", tickTimes[1], tickMaxTimes[1], tickInstructions[1]));
-	_sb.AppendLine(string.Format("[2]: {0:F0} ({1,3:F0}) | {2}", tickTimes[2], tickMaxTimes[2], tickInstructions[2]));
-	_sb.AppendLine(string.Format("[3]: {0:F0} ({1,3:F0}) | {2}", tickTimes[3], tickMaxTimes[3], tickInstructions[3]));
-	_sb.AppendLine(string.Format("[4]: {0:F0} ({1,3:F0}) | {2}", tickTimes[4], tickMaxTimes[4], tickInstructions[4]));
-	_sb.AppendLine(string.Format("[5]: {0:F0} ({1,3:F0}) | {2}", tickTimes[5], tickMaxTimes[5], tickInstructions[5]));
+	_sb.AppendLine("[ T]:   ms ( max) | instr");
+	for (int i = 0; i < TickerLimit; i++)
+		_sb.AppendLine(string.Format("[{0,2}]: {1,4:F0} ({2,4:F0}) | {3,5}", i, tickTimes[i], tickMaxTimes[i], tickInstructions[i]));
 	_sb.AppendLine(string.Format("Tick: {0}", Ticker));
 
 	string text = _sb.ToString();
@@ -255,10 +245,11 @@ void ReflectorLightAdjust()
 {
 	LightAdjust(reflectorLightsCast, reflectorLightColor, 160);
 }
-void LightAdjust(List<IMyLightingBlock> LightBlocks, Color color, int LightRadius = 10, int intensity = 5)
+void LightAdjust(List<IMyLightingBlock> LightBlocks, Color color, int LightRadius = 10, int intensity = 5, bool samegrid = true)
 {
 	for (int i = 0; i < LightBlocks.Count; i++)
 	{
+		if (samegrid && LightBlocks[i].CubeGrid != Me.CubeGrid) continue;
 		LightBlocks[i].Radius = LightRadius;
 		LightBlocks[i].Intensity = intensity;
 		LightBlocks[i].Color = color;
@@ -460,10 +451,10 @@ void AquireTarget(int distance)
 		_sb.AppendLine(CreateGPS("Target", info.HitPosition));
 	}
       
-    _sb.AppendLine(string.Format("scan range: {0} km", NavigationCamera.AvailableScanRange / 1000));
-    _sb.AppendLine(string.Format("scan cooldown: {0} s", NavigationCamera.TimeUntilScan(20000) / 1000));
-    _sb.AppendLine(string.Format("distance limit: {0}", NavigationCamera.RaycastDistanceLimit));
-    _sb.AppendLine(string.Format("time multiplier: {0}", NavigationCamera.RaycastTimeMultiplier));
+	_sb.AppendLine(string.Format("scan range: {0} km", NavigationCamera.AvailableScanRange / 1000));
+	_sb.AppendLine(string.Format("scan cooldown: {0} s", NavigationCamera.TimeUntilScan(20000) / 1000));
+	_sb.AppendLine(string.Format("distance limit: {0}", NavigationCamera.RaycastDistanceLimit));
+	_sb.AppendLine(string.Format("time multiplier: {0}", NavigationCamera.RaycastTimeMultiplier));
 	
 	WriteToDisplay(NavigationDisplay);
 }
@@ -564,9 +555,9 @@ void SolarAdjust()
 		SolarPowerOutputPrev = SolarPowerOutput;
 		SolarPowerOutput = solar.MaxOutput / 0.16;
 		double delta = SolarPowerOutput - SolarPowerOutputPrev;
-    double maxOutput = solar.MaxOutput * solarPanels.Count;
-		double totalOutput = solar.CurrentOutput * solarPanels.Count;
-
+    double maxOutput = solarPanels.Sum(panel => panel.MaxOutput);//solar.MaxOutput * solarPanels.Count;
+		double totalOutput = solarPanels.Sum(panel => panel.CurrentOutput);//solar.CurrentOutput * solarPanels.Count;
+		
 		_sb.Clear();
 		_sb.AppendLine("Solar Panels");
 		_sb.AppendLine(string.Format("Power:     {0,11:P8}", SolarPowerOutput));
