@@ -1,5 +1,7 @@
 // SEMF - Space Engineers Management Framework
 // https://malforge.github.io/spaceengineers/pbapi/
+int CurrentBlockCount, PastBlockCount;
+
 int LightRadius;
 
 string StorageMaterialsKeyword;
@@ -15,9 +17,8 @@ int StorageComponentsDisplayPanel;
 int StorageConsumblesDisplayPanel;
 int StorageAmmoDisplayPanel;
 
-string NavigationCameraKeyword;
-string NavigationDisplayKeyword;
-int NavigationDisplayPanel;
+string ProbeCameraKeyword;
+string ProbeDisplayKeyword;
 
 string SolarPointerRCKeyword;
 string solarAzimuthRotorKeyword;
@@ -30,7 +31,10 @@ double Proximity, SolarDirectionSwitch;
 double SolarPowerOutput, SolarPowerOutputPrev;
 
 ////////////////////////////////////// LISTS ///////////////////////////////////
+Dictionary<string, string> assemblerBlueprintMap = new Dictionary<string, string>();
+
 List<IMyTerminalBlock> L = new List<IMyTerminalBlock>();
+List<MyInventoryItem> items = new List<MyInventoryItem>();
 
 List<IMyReflectorLight> ReflectorLightBlocks = new List<IMyReflectorLight>();
 List<IMyInteriorLight> InteriorLightBlocks = new List<IMyInteriorLight>();
@@ -39,14 +43,14 @@ List<IMyLightingBlock> reflectorLightsCast = new List<IMyLightingBlock>();
 
 List<IMyAssembler> assemblers = new List<IMyAssembler>();
 List<IMyRefinery> refinerys = new List<IMyRefinery>();
-// Maps inventory item SubtypeId -> blueprint SubtypeId for assembler items whose names differ
-Dictionary<string, string> assemblerBlueprintMap = new Dictionary<string, string>();
 
 List<IMyMedicalRoom> RefillPoints = new List<IMyMedicalRoom>();
+List<IMyTextSurfaceProvider> Clocks = new List<IMyTextSurfaceProvider>(); // [Clocks]
 
-List<MyInventoryItem> items = new List<MyInventoryItem>();
 List<IMySolarPanel> solarPanels = new List<IMySolarPanel>();
 List<IMyFunctionalBlock> algaeFarms = new List<IMyFunctionalBlock>();
+
+List<IMyTextSurfaceProvider> ProbeDisplay = new List<IMyTextSurfaceProvider>(); // [ScopeTarget]
 ////////////////////////////////////// LISTS ///////////////////////////////////
 Color interiorLightColor;
 Color reflectorLightColor;
@@ -75,8 +79,7 @@ IMyTextSurface componentsDisplay;
 IMyTextSurface ConsumblesDisplay;
 IMyTextSurface ammoDisplay;
 
-IMyTextSurface NavigationDisplay;
-IMyCameraBlock NavigationCamera;
+IMyCameraBlock ProbeCamera;
 
 System.Text.StringBuilder _sb = new System.Text.StringBuilder();
 ////////////////////////////////////// CACHED BLOCKS ///////////////////////////////////
@@ -88,6 +91,7 @@ double[] tickInstructions = new double[TickerLimit];
 DateTime tickStart;
 public Program()
 {
+	CurrentBlockCount = PastBlockCount = 0;
 	Runtime.UpdateFrequency = UpdateFrequency.Update10; //| UpdateFrequency.Update10 | UpdateFrequency.Update1
 	Ticker = 0;
 	// Light -----------------------------------------------------------------------
@@ -100,7 +104,7 @@ public Program()
 	// Storage ---------------------------------------------------------------------
 	StorageMaterialsKeyword = "[Materials]";
 	StorageMaterialsDisplayKeyword = "[MatDisplay]";
-	StorageMaterialsDisplayPanel = 1;
+	StorageMaterialsDisplayPanel = 0;
 	
 	StorageComponentsKeyword = "[Components]";
 	StorageComponentsDisplayKeyword = "[CompDisplay]";
@@ -108,11 +112,11 @@ public Program()
 
 	StorageConsumblesKeyword = "[Consumbles]";
 	StorageConsumblesDisplayKeyword = "[ConsumblesDisplay]";
-	StorageConsumblesDisplayPanel = 1;
+	StorageConsumblesDisplayPanel = 0;
 
 	StorageAmmoKeyword = "[Ammo]";
 	StorageAmmoDisplayKeyword = "[AmmoDisplay]";
-	StorageAmmoDisplayPanel = 2;
+	StorageAmmoDisplayPanel = 0;
 	// Solar -----------------------------------------------------------------------
 	SolarPointerRCKeyword = "[Axis Aligner]";
 	solarAzimuthRotorKeyword = "[Solar Wing]";
@@ -120,21 +124,25 @@ public Program()
 	SolarCTCKeyword = "[SolarCTC]";
 	SolarCameraKeyword = "[SolarTracker]";
 
-	SolarDisplaypanel = 2;
+	SolarDisplaypanel = 0;
 	SolarDirectionSwitch = 1;
 	SolarRedirects = 0;
 	Proximity = 0.001;
 
-	// Navigation -------------------------------------------------------------------
-	NavigationCameraKeyword = "[Scope Camera]";
-	NavigationDisplayKeyword = "[Navigation]";
-	NavigationDisplayPanel = 0;
+	// Probe -------------------------------------------------------------------
+	ProbeCameraKeyword = "[ScopeCamera]";
+	ProbeDisplayKeyword = "[ScopeTarget]";
 
 	BlueprintMapFill();
 }
 //public void Save(){}
 public void Main(string argument, UpdateType updateSource)
 {
+	if (argument.IndexOf("refresh", StringComparison.OrdinalIgnoreCase) >= 0)
+	{
+		RefreshBlockCache();
+		return;
+	}
 	if (argument.IndexOf("navscan", StringComparison.OrdinalIgnoreCase) >= 0)
 	{
 		int distance = 20000;
@@ -142,20 +150,24 @@ public void Main(string argument, UpdateType updateSource)
 		AquireTarget(distance);
 		return;
 	}
-
+	if (argument.IndexOf("cleanminer", StringComparison.OrdinalIgnoreCase) >= 0)
+	{
+		MoveGridContentsToInventory("Miner", MaterialsInventory);
+		return;
+	}
 	if (argument.IndexOf("getasmqueue", StringComparison.OrdinalIgnoreCase) >= 0)
 	{
 		Me.CustomData = "getasmqueue";
 		return;
 	}
-
+// ------------------------------- MAIN UPDATE LOOP ---------------------------
 	if ((updateSource & UpdateType.Update10) == 0) return;
 	EchoStats();
 
 	tickStart = DateTime.Now;
 	switch (Ticker)
 	{
-		case 0: RefreshBlockCache(); break;
+		case 0: if (BlockCountChanged()) RefreshBlockCache(); break;
 		case 1: CleanAssemblers(); SortComponents(); break;
 		case 2: ProcessAssemblerQueue(invCompBlock); break;
 		case 3: ProcessAssemblerQueue(invAmmoBlock); break;
@@ -195,15 +207,19 @@ void RefreshBlockCache()
 	GridTerminalSystem.GetBlocksOfType<IMyRefinery>(refinerys);
 	GridTerminalSystem.GetBlocksOfType<IMyAssembler>(assemblers);
 	GridTerminalSystem.GetBlocksOfType<IMySolarPanel>(solarPanels);
-	GridTerminalSystem.GetBlocksOfType<IMyMedicalRoom>(RefillPoints);
 
-	GridTerminalSystem.GetBlocksOfType<IMyInteriorLight>(InteriorLightBlocks);
-	GridTerminalSystem.GetBlocksOfType<IMyReflectorLight>(ReflectorLightBlocks);
+	GridTerminalSystem.GetBlocksOfType<IMyMedicalRoom>(RefillPoints);
+	Clocks.Clear();
+	foreach (var block in BlocksNamed("[Clock]")) Clocks.Add(block as IMyTextSurfaceProvider);
+	
 
 	interiorLightsCast.Clear();
-	for (int i = 0; i < InteriorLightBlocks.Count; i++) interiorLightsCast.Add(InteriorLightBlocks[i]);
+	GridTerminalSystem.GetBlocksOfType<IMyInteriorLight>(InteriorLightBlocks);
+	foreach (var light in InteriorLightBlocks) interiorLightsCast.Add(light);
+
 	reflectorLightsCast.Clear();
-	for (int i = 0; i < ReflectorLightBlocks.Count; i++) reflectorLightsCast.Add(ReflectorLightBlocks[i]);
+	GridTerminalSystem.GetBlocksOfType<IMyReflectorLight>(ReflectorLightBlocks);
+	foreach (var light in ReflectorLightBlocks) reflectorLightsCast.Add(light);
 
 	invMatBlock        = BlockNamed(StorageMaterialsKeyword);
 	invCompBlock       = BlockNamed(StorageComponentsKeyword);
@@ -220,7 +236,9 @@ void RefreshBlockCache()
 	solarCTC           = BlockNamed(SolarCTCKeyword) as IMyTurretControlBlock;
 	solarCamera        = BlockNamed(SolarCameraKeyword) as IMyCameraBlock;
 
-	NavigationCamera   = BlockNamed(NavigationCameraKeyword) as IMyCameraBlock;
+	ProbeCamera   = BlockNamed(ProbeCameraKeyword) as IMyCameraBlock;
+	ProbeDisplay.Clear();
+	foreach (var display in BlocksNamed(ProbeDisplayKeyword)) ProbeDisplay.Add(display as IMyTextSurfaceProvider);
 
 	solarDisplay       = GetTextSurface(BlockNamed(SolarDisplayKeyword) as IMyTextSurfaceProvider, SolarDisplaypanel);
 	materialsDisplay   = GetTextSurface(BlockNamed(StorageMaterialsDisplayKeyword) as IMyTextSurfaceProvider, StorageMaterialsDisplayPanel);
@@ -228,13 +246,7 @@ void RefreshBlockCache()
 	ConsumblesDisplay  = GetTextSurface(BlockNamed(StorageConsumblesDisplayKeyword) as IMyTextSurfaceProvider, StorageConsumblesDisplayPanel);
 	ammoDisplay        = GetTextSurface(BlockNamed(StorageAmmoDisplayKeyword) as IMyTextSurfaceProvider, StorageAmmoDisplayPanel);
 
-	NavigationDisplay  = GetTextSurface(BlockNamed(NavigationDisplayKeyword) as IMyTextSurfaceProvider, NavigationDisplayPanel);
-
 	GridTerminalSystem.GetBlocksOfType<IMyFunctionalBlock>(algaeFarms, block => block.BlockDefinition.SubtypeId == "LargeBlockAlgaeFarm");
-}
-IMyTextSurface GetTextSurface(IMyTextSurfaceProvider DisplayBlock, int panel = 0)
-{
-	return (DisplayBlock != null) ? DisplayBlock.GetSurface(panel) : null;
 }
 // ------------------------------------------------------------------------------- Light
 void InteriorLightAdjust()
@@ -262,12 +274,17 @@ void DisplayClocks()
 	{
 		DisplayClock(RefillPoints[i] as IMyTextSurfaceProvider, 0);
 	}
+	for (int i = 0; i < Clocks.Count; i++)
+	{
+		DisplayClock(Clocks[i], 0);
+	}
 }
 void DisplayClock(IMyTextSurfaceProvider DisplayBlock, int panel = 0)
 {
 	var surface = GetTextSurface(DisplayBlock, panel);
 	if (surface != null)
 	{
+		surface.ContentType = ContentType.SCRIPT;
 		surface.Script = "TSS_ClockDigital";
 		surface.ScriptBackgroundColor = backgroundColor;
 		surface.ScriptForegroundColor = foregroundColor;
@@ -315,7 +332,7 @@ void DisplayStored(IMyInventory inventory, IMyTextSurface display, string title,
 		items.Sort((a, b) => ((double)b.Amount).CompareTo((double)a.Amount));
 		for (int i = 0; i < items.Count; i++)
 			_sb.AppendLine(string.Format(format, FormatTypeId(items[i]), (double)items[i].Amount));
-		display.WriteText(_sb);
+		WriteToDisplay(display);
 	}
 }
 string FormatTypeId(MyInventoryItem item)
@@ -418,7 +435,7 @@ void SortComponents()
 		}
 	}
 }
-// ------------------------------------------------------------------------------- Navigation
+// ------------------------------------------------------------------------------- Probe
 MyDetectedEntityInfo GetCameraTarget(IMyCameraBlock camera, double distance = 5000)
 {
 	if (!camera.EnableRaycast)
@@ -429,34 +446,35 @@ MyDetectedEntityInfo GetCameraTarget(IMyCameraBlock camera, double distance = 50
 void AquireTarget(int distance)
 {
 	_sb.Clear();
-	_sb.AppendLine("== Navigation ==");
-  if (NavigationCamera == null)
+	_sb.AppendLine("== Probe ==");
+  if (ProbeCamera == null)
   {
-    _sb.AppendLine("No camera found: " + NavigationCameraKeyword);
-		WriteToDisplay(NavigationDisplay);
-		return;
+    _sb.AppendLine("No camera found: " + ProbeCameraKeyword);
 	}
-	
-	MyDetectedEntityInfo info = GetCameraTarget(NavigationCamera, distance);
-	if (info.IsEmpty()) 
+	else {
+		MyDetectedEntityInfo info = GetCameraTarget(ProbeCamera, distance);
+		if (info.IsEmpty()) 
+		{
+			_sb.AppendLine("No target in sight");
+		}
+		else
+		{
+			_sb.AppendLine(string.Format("Target:   {0}", info.Name));
+			_sb.AppendLine(string.Format("Type:     {0}", info.Type));
+			_sb.AppendLine(string.Format("Velocity: {0:N2} m/s", info.Velocity.Length()));
+			_sb.AppendLine(string.Format("Distance: {0:N2} m", Vector3D.Distance(ProbeCamera.GetPosition(), info.Position)));
+			_sb.AppendLine(CreateGPS("Target", info.HitPosition));
+		}
+				
+		_sb.AppendLine(string.Format("scan range: {0} km", ProbeCamera.AvailableScanRange / 1000));
+		_sb.AppendLine(string.Format("scan cooldown: {0} s", ProbeCamera.TimeUntilScan(20000) / 1000));
+		_sb.AppendLine(string.Format("distance limit: {0}", ProbeCamera.RaycastDistanceLimit));
+		_sb.AppendLine(string.Format("time multiplier: {0}", ProbeCamera.RaycastTimeMultiplier));
+	}
+	for (int i = 0; i < ProbeDisplay.Count; i++)
 	{
-		_sb.AppendLine("No target in sight");
+		WriteToDisplay(GetTextSurface(ProbeDisplay[i],0), true);
 	}
-	else
-	{
-		_sb.AppendLine(string.Format("Target:   {0}", info.Name));
-		_sb.AppendLine(string.Format("Type:     {0}", info.Type));
-		_sb.AppendLine(string.Format("Velocity: {0:N2} m/s", info.Velocity.Length()));
-		_sb.AppendLine(string.Format("Distance: {0:N2} m", Vector3D.Distance(NavigationCamera.GetPosition(), info.Position)));
-		_sb.AppendLine(CreateGPS("Target", info.HitPosition));
-	}
-      
-	_sb.AppendLine(string.Format("scan range: {0} km", NavigationCamera.AvailableScanRange / 1000));
-	_sb.AppendLine(string.Format("scan cooldown: {0} s", NavigationCamera.TimeUntilScan(20000) / 1000));
-	_sb.AppendLine(string.Format("distance limit: {0}", NavigationCamera.RaycastDistanceLimit));
-	_sb.AppendLine(string.Format("time multiplier: {0}", NavigationCamera.RaycastTimeMultiplier));
-	
-	WriteToDisplay(NavigationDisplay);
 }
 // ------------------------------------------------------------------------------- Storage Queue
 void ProcessAssemblerQueue(IMyTerminalBlock storageBlock)
@@ -603,7 +621,7 @@ void SolarAdjust()
 			SolarConfigureCTC();
 		}
 		if (solarDisplay != null)
-			solarDisplay.WriteText(_sb);
+			WriteToDisplay(solarDisplay);
 		else
 			Echo(_sb.ToString());
 	}
@@ -630,6 +648,18 @@ void SolarConfigureAxisAligner()
 	}
 }
 // ------------------------------------------------------------------------------- util
+void assert(bool cond, String errormsg)
+{
+	if (!cond) throw new Exception(errormsg);
+}
+void MoveOneItem(IMyInventory source, IMyInventory dest, int index = 0)
+{
+	if (source == null || dest == null) return;
+	items.Clear();
+	source.GetItems(items);
+	if (items.Count > 0)
+		source.TransferItemTo(dest, index, null, true, null);
+}
 void MoveAllItems(IMyInventory source, IMyInventory dest)
 {
 	if (source == null || dest == null) return;
@@ -640,14 +670,6 @@ void MoveAllItems(IMyInventory source, IMyInventory dest)
 	{
 		source.TransferItemTo(dest, 0, null, true, null);
 	}
-}
-void MoveOneItem(IMyInventory source, IMyInventory dest, int index = 0)
-{
-	if (source == null || dest == null) return;
-	items.Clear();
-	source.GetItems(items);
-	if (items.Count > 0)
-		source.TransferItemTo(dest, index, null, true, null);
 }
 void MoveGridContentsToInventory(string gridNameSelector, IMyInventory target)
 {
@@ -665,29 +687,6 @@ void MoveGridContentsToInventory(string gridNameSelector, IMyInventory target)
 				MoveAllItems(source, target);
 		}
 	}
-}
-double[] GetXYZ(IMyTerminalBlock block)
-{
-	return new double[] { block.GetPosition().GetDim(0), block.GetPosition().GetDim(1), block.GetPosition().GetDim(2) };
-}
-void SetName(IMyTerminalBlock block, string name)
-{
-	if (block != null)
-	{
-		block.CustomName = name;
-	}
-}
-List<IMyTerminalBlock> BlocksNamed(String str)
-{
-	L.Clear();
-	GridTerminalSystem.SearchBlocksOfName(str, L);
-	return L;
-}
-IMyTerminalBlock BlockNamed(String str)
-{
-	L.Clear();
-	L = BlocksNamed(str);
-	return L.Count > 0 ? L[0] : null;
 }
 void BlueprintMapFill()
 {
@@ -731,16 +730,23 @@ void BlueprintMapFill()
 	// assemblerBlueprintMap["Superconductor"]       = "Superconductor";
 	// assemblerBlueprintMap["BulletproofGlass"]     = "BulletproofGlass";
 }
-void assert(bool cond, String errormsg)
+void FormatAllDisplays(IMyTextSurfaceProvider DisplayBlock, int panel = 0)
 {
-	if (!cond) throw new Exception(errormsg);
+	for (int i = 0; i < DisplayBlock.SurfaceCount; i++)
+	{
+		var surface = GetTextSurface(DisplayBlock, i);
+		if (surface != null)
+		{
+			surface.Font = font;
+			surface.FontColor = foregroundColor;
+			surface.BackgroundColor = backgroundColor;
+
+			surface.ScriptBackgroundColor = backgroundColor;
+			surface.ScriptForegroundColor = foregroundColor;
+		}
+	}
 }
-string CreateGPS(string name, Vector3D? pos)
-{
-	if (pos == null) return $"GPS:{name}:::::#FF00FF00:";
-	return $"GPS:{name}:{pos.Value.X:F2}:{pos.Value.Y:F2}:{pos.Value.Z:F2}:#FF00FF00:";
-}
-void WriteToDisplay(IMyTextSurface surface = null)
+void WriteToDisplay(IMyTextSurface surface = null, bool echoToo = false)
 {
   if (surface != null)
   {
@@ -753,5 +759,45 @@ void WriteToDisplay(IMyTextSurface surface = null)
   {
     Me.CustomData = _sb.ToString();
   }
-  Echo(_sb.ToString());
+  if (echoToo)Echo(_sb.ToString());
+}
+void SetName(IMyTerminalBlock block, string name)
+{
+	if (block != null)
+	{
+		block.CustomName = name;
+	}
+}
+bool BlockCountChanged()
+{
+	GridTerminalSystem.GetBlocks(L);
+	CurrentBlockCount = L.Count;
+	bool changed = CurrentBlockCount != PastBlockCount;
+	PastBlockCount = CurrentBlockCount;
+	return changed;
+}
+string 		CreateGPS(string name, Vector3D? pos)
+{
+	if (pos == null) return $"GPS:{name}:::::#FF00FF00:";
+	return $"GPS:{name}:{pos.Value.X:F2}:{pos.Value.Y:F2}:{pos.Value.Z:F2}:#FF00FF00:";
+}
+double[] 	GetXYZ(IMyTerminalBlock block)
+{
+	return new double[] { block.GetPosition().GetDim(0), block.GetPosition().GetDim(1), block.GetPosition().GetDim(2) };
+}
+IMyTextSurface 					GetTextSurface(IMyTextSurfaceProvider DisplayBlock, int panel = 0)
+{
+	return (DisplayBlock != null) ? DisplayBlock.GetSurface(panel) : null;
+}
+IMyTerminalBlock				BlockNamed(String str)
+{
+	L.Clear();
+	L = BlocksNamed(str);
+	return L.Count > 0 ? L[0] : null;
+}
+List<IMyTerminalBlock> 	BlocksNamed(String str)
+{
+	L.Clear();
+	GridTerminalSystem.SearchBlocksOfName(str, L);
+	return L;
 }
