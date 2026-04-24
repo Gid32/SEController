@@ -160,6 +160,12 @@ public void Main(string argument, UpdateType updateSource)
 		Me.CustomData = "getasmqueue";
 		return;
 	}
+	if (argument.IndexOf("formatdisplay", StringComparison.OrdinalIgnoreCase) >= 0)
+	{
+		string keyword = argument.Trim().Split(' ')[1];
+		FormatAllDisplays(BlockNamed(keyword) as IMyTextSurfaceProvider);
+		return;
+	}
 // ------------------------------- MAIN UPDATE LOOP ---------------------------
 	if ((updateSource & UpdateType.Update10) == 0) return;
 	EchoStats();
@@ -730,13 +736,14 @@ void BlueprintMapFill()
 	// assemblerBlueprintMap["Superconductor"]       = "Superconductor";
 	// assemblerBlueprintMap["BulletproofGlass"]     = "BulletproofGlass";
 }
-void FormatAllDisplays(IMyTextSurfaceProvider DisplayBlock, int panel = 0)
+void FormatAllDisplays(IMyTextSurfaceProvider DisplayBlock)
 {
 	for (int i = 0; i < DisplayBlock.SurfaceCount; i++)
 	{
 		var surface = GetTextSurface(DisplayBlock, i);
 		if (surface != null)
 		{
+			surface.ContentType = ContentType.TEXT_AND_IMAGE;
 			surface.Font = font;
 			surface.FontColor = foregroundColor;
 			surface.BackgroundColor = backgroundColor;
