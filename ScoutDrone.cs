@@ -63,6 +63,7 @@ void DisplayNavigation(int distance)
   if (info.IsEmpty())
   {
     _sb.AppendLine("No target in sight");
+		_sb.AppendLine(string.Format("Scanned distance: {0:N2} km", distance/1000.0));
   }
   else
   {
@@ -72,10 +73,10 @@ void DisplayNavigation(int distance)
     _sb.AppendLine(string.Format("Distance: {0:N2} m", Vector3D.Distance(NavigationCamera.GetPosition(), info.Position)));
     _sb.AppendLine(CreateGPS("Target", info.HitPosition));
   }
-  _sb.AppendLine(string.Format("scan range:      {0} km", NavigationCamera.AvailableScanRange / 1000));
-  _sb.AppendLine(string.Format("scan cooldown:   {0} s", NavigationCamera.TimeUntilScan(20000) / 1000));
-  _sb.AppendLine(string.Format("distance limit:  {0}", NavigationCamera.RaycastDistanceLimit));
-  _sb.AppendLine(string.Format("time multiplier: {0}", NavigationCamera.RaycastTimeMultiplier));
+  _sb.AppendLine(string.Format("Scan range:      {0} km", NavigationCamera.AvailableScanRange / 1000));
+  _sb.AppendLine(string.Format("Scan cooldown:   {0} s", NavigationCamera.TimeUntilScan(20000) / 1000));
+  _sb.AppendLine(string.Format("Distance limit:  {0}", NavigationCamera.RaycastDistanceLimit));
+  _sb.AppendLine(string.Format("Time multiplier: {0}", NavigationCamera.RaycastTimeMultiplier));
 
   WriteToDisplay(NavigationDisplay);
 }
