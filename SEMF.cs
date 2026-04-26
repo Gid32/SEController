@@ -3,6 +3,7 @@
 int CurrentBlockCount, PastBlockCount;
 
 int LightRadius;
+string ExclusionKeyword;
 
 string StorageMaterialsKeyword;
 string StorageComponentsKeyword;
@@ -16,6 +17,9 @@ int StorageMaterialsDisplayPanel;
 int StorageComponentsDisplayPanel;
 int StorageConsumblesDisplayPanel;
 int StorageAmmoDisplayPanel;
+
+string BatteryDisplayKeyword;
+int BatteryDisplayPanel;
 
 string ProbeCameraKeyword;
 string ProbeDisplayKeyword;
@@ -48,6 +52,7 @@ List<IMyMedicalRoom> RefillPoints = new List<IMyMedicalRoom>();
 List<IMyTextSurfaceProvider> Clocks = new List<IMyTextSurfaceProvider>(); // [Clocks]
 
 List<IMySolarPanel> solarPanels = new List<IMySolarPanel>();
+List<IMyBatteryBlock> batteries = new List<IMyBatteryBlock>();
 List<IMyFunctionalBlock> algaeFarms = new List<IMyFunctionalBlock>();
 
 List<IMyTextSurfaceProvider> ProbeDisplay = new List<IMyTextSurfaceProvider>(); // [ScopeTarget]
@@ -78,6 +83,7 @@ IMyTextSurface materialsDisplay;
 IMyTextSurface componentsDisplay;
 IMyTextSurface ConsumblesDisplay;
 IMyTextSurface ammoDisplay;
+IMyTextSurface batteryDisplay;
 
 IMyCameraBlock ProbeCamera;
 
@@ -95,10 +101,10 @@ public Program()
 	Runtime.UpdateFrequency = UpdateFrequency.Update10; //| UpdateFrequency.Update10 | UpdateFrequency.Update1
 	Ticker = 0;
 	// Light -----------------------------------------------------------------------
+	LightRadius = 10;
+	ExclusionKeyword = "[TechLight]";
 	interiorLightColor = new Color(204, 255, 140, 255);
 	reflectorLightColor = new Color(255, 255, 255, 255);
-	LightRadius = 10;
-	// Clocks ----------------------------------------------------------------------
 	foregroundColor = new Color(100, 255, 100, 255);
 	backgroundColor = new Color(0, 0, 0, 255);
 	// Storage ---------------------------------------------------------------------
@@ -119,7 +125,7 @@ public Program()
 	StorageAmmoDisplayPanel = 0;
 	// Solar -----------------------------------------------------------------------
 	SolarPointerRCKeyword = "[Axis Aligner]";
-	solarAzimuthRotorKeyword = "[Solar Wing]";
+	solarAzimuthRotorKeyword = "[SolarWing]";
 	SolarDisplayKeyword = "[SolarDisplay]";
 	SolarCTCKeyword = "[SolarCTC]";
 	SolarCameraKeyword = "[SolarTracker]";
@@ -129,6 +135,9 @@ public Program()
 	SolarRedirects = 0;
 	Proximity = 0.001;
 
+	// Battery ----------------------------------------------------------------
+	BatteryDisplayKeyword = "[BatteryDisplay]";
+	BatteryDisplayPanel = 0;
 	// Probe -------------------------------------------------------------------
 	ProbeCameraKeyword = "[ScopeCamera]";
 	ProbeDisplayKeyword = "[ScopeTarget]";
@@ -138,29 +147,29 @@ public Program()
 //public void Save(){}
 public void Main(string argument, UpdateType updateSource)
 {
-	if (argument.IndexOf("refresh", StringComparison.OrdinalIgnoreCase) >= 0)
+	if (StringContains(argument, "refresh"))
 	{
 		RefreshBlockCache();
 		return;
 	}
-	if (argument.IndexOf("navscan", StringComparison.OrdinalIgnoreCase) >= 0)
+	if (StringContains(argument, "navscan"))
 	{
 		int distance = 20000;
 		if (argument.Trim().Split(' ').Length >= 2) int.TryParse(argument.Trim().Split(' ')[1], out distance);
 		AquireTarget(distance);
 		return;
 	}
-	if (argument.IndexOf("cleanminer", StringComparison.OrdinalIgnoreCase) >= 0)
+	if (StringContains(argument, "cleanminer"))
 	{
 		MoveGridContentsToInventory("Miner", MaterialsInventory);
 		return;
 	}
-	if (argument.IndexOf("getasmqueue", StringComparison.OrdinalIgnoreCase) >= 0)
+	if (StringContains(argument, "getasmqueue"))
 	{
 		Me.CustomData = "getasmqueue";
 		return;
 	}
-	if (argument.IndexOf("formatdisplay", StringComparison.OrdinalIgnoreCase) >= 0)
+	if (StringContains(argument, "formatdisplay"))
 	{
 		string keyword = argument.Trim().Split(' ')[1];
 		FormatAllDisplays(BlockNamed(keyword) as IMyTextSurfaceProvider);
@@ -173,18 +182,24 @@ public void Main(string argument, UpdateType updateSource)
 	tickStart = DateTime.Now;
 	switch (Ticker)
 	{
-		case 0: if (BlockCountChanged()) RefreshBlockCache(); break;
+		case 0: if (BlockCountChanged()) {
+			RefreshBlockCache(); 
+			InteriorLightAdjust();
+			ReflectorLightAdjust();
+			DisplayClocks();
+			
+		} break;
 		case 1: CleanAssemblers(); SortComponents(); break;
 		case 2: ProcessAssemblerQueue(invCompBlock); break;
 		case 3: ProcessAssemblerQueue(invAmmoBlock); break;
 		case 4:	DisplayStoredComponents(); break;
 		case 5: DisplayStoredConsumbles(); break;
 		case 6: DisplayStoredAmmo(); break;
-		case 7: CleanAlgaeFarms(); CleanRefinerys(); break;
-		case 8: DisplayStoredMaterials(); break;
-		case 9: InteriorLightAdjust(); ReflectorLightAdjust(); break;
+		case 7: CleanAlgaeFarms(); break;
+		case 8: CleanRefinerys(); break;
+		case 9: DisplayStoredMaterials(); break;
 		case 10: SolarAdjust(); break;
-		case 11: DisplayClocks(); break;
+		case 11: DisplayBatteries(); break;
 	}
 	tickTimes[Ticker] = (DateTime.Now - tickStart).TotalMilliseconds;
 	tickMaxTimes[Ticker] = Math.Max(tickTimes[Ticker], tickMaxTimes[Ticker]);
@@ -205,7 +220,7 @@ void EchoStats()
 
 	string text = _sb.ToString();
 	Echo(text);
-	Me.GetSurface(0).WriteText(text);
+	WriteToDisplay(Me.GetSurface(0),true);
 }
 // ------------------------------------------------------------------------------- Cache
 void RefreshBlockCache()
@@ -253,6 +268,9 @@ void RefreshBlockCache()
 	ammoDisplay        = GetTextSurface(BlockNamed(StorageAmmoDisplayKeyword) as IMyTextSurfaceProvider, StorageAmmoDisplayPanel);
 
 	GridTerminalSystem.GetBlocksOfType<IMyFunctionalBlock>(algaeFarms, block => block.BlockDefinition.SubtypeId == "LargeBlockAlgaeFarm");
+
+	GridTerminalSystem.GetBlocksOfType<IMyBatteryBlock>(batteries);
+	batteryDisplay = GetTextSurface(BlockNamed(BatteryDisplayKeyword) as IMyTextSurfaceProvider, BatteryDisplayPanel);
 }
 // ------------------------------------------------------------------------------- Light
 void InteriorLightAdjust()
@@ -267,7 +285,7 @@ void LightAdjust(List<IMyLightingBlock> LightBlocks, Color color, int LightRadiu
 {
 	for (int i = 0; i < LightBlocks.Count; i++)
 	{
-		if (samegrid && LightBlocks[i].CubeGrid != Me.CubeGrid) continue;
+		if (samegrid && LightBlocks[i].CubeGrid != Me.CubeGrid && !StringContains(LightBlocks[i].CustomName, ExclusionKeyword)) continue;
 		LightBlocks[i].Radius = LightRadius;
 		LightBlocks[i].Intensity = intensity;
 		LightBlocks[i].Color = color;
@@ -462,6 +480,7 @@ void AquireTarget(int distance)
 		if (info.IsEmpty()) 
 		{
 			_sb.AppendLine("No target in sight");
+			_sb.AppendLine(string.Format("Scanned distance: {0:N2} km", distance/1000.0));
 		}
 		else
 		{
@@ -472,10 +491,10 @@ void AquireTarget(int distance)
 			_sb.AppendLine(CreateGPS("Target", info.HitPosition));
 		}
 				
-		_sb.AppendLine(string.Format("scan range: {0} km", ProbeCamera.AvailableScanRange / 1000));
-		_sb.AppendLine(string.Format("scan cooldown: {0} s", ProbeCamera.TimeUntilScan(20000) / 1000));
-		_sb.AppendLine(string.Format("distance limit: {0}", ProbeCamera.RaycastDistanceLimit));
-		_sb.AppendLine(string.Format("time multiplier: {0}", ProbeCamera.RaycastTimeMultiplier));
+		_sb.AppendLine(string.Format("Scan range: {0} km", ProbeCamera.AvailableScanRange / 1000));
+		_sb.AppendLine(string.Format("Scan cooldown: {0} s", ProbeCamera.TimeUntilScan(20000) / 1000));
+		_sb.AppendLine(string.Format("Distance limit: {0}", ProbeCamera.RaycastDistanceLimit));
+		_sb.AppendLine(string.Format("Time multiplier: {0}", ProbeCamera.RaycastTimeMultiplier));
 	}
 	for (int i = 0; i < ProbeDisplay.Count; i++)
 	{
@@ -566,13 +585,61 @@ void ProcessAssemblerQueue(IMyTerminalBlock storageBlock)
 			target.AddQueueItem(blueprintId, (MyFixedPoint)diff);
 	}
 }
+// ------------------------------------------------------------------------------- Battery
+void DisplayBatteries()
+{
+	if (batteries == null || batteries.Count == 0) return;
+
+	float totalStored  = 0f, totalMax   = 0f;
+	float totalInput   = 0f, totalOutput = 0f;
+	int autoCount = 0;
+	for (int i = 0; i < batteries.Count; i++)
+	{
+		if (batteries[i].ChargeMode != ChargeMode.Auto) continue;
+		totalStored  += batteries[i].CurrentStoredPower;
+		totalMax     += batteries[i].MaxStoredPower;
+		totalInput   += batteries[i].CurrentInput;
+		totalOutput  += batteries[i].CurrentOutput;
+		autoCount++;
+	}
+	float pct = (totalMax > 0f) ? totalStored / totalMax : 0f;
+	int barLen = 20;
+	int filled = (int)Math.Round(pct * barLen);
+	string bar = "[" + new string('|', filled) + new string(' ', barLen - filled) + "]";
+
+	_sb.Clear();
+	_sb.AppendLine("== Batteries ==");
+	_sb.AppendLine(string.Format("Count  : {0,3} / {1,3} (auto)", autoCount, batteries.Count));
+	_sb.AppendLine(string.Format("Charge : {0,7:P1}  {1}", pct, bar));
+	_sb.AppendLine(string.Format("Stored : {0} / {1}", formatPower(totalStored, true), formatPower(totalMax, true)));
+	_sb.AppendLine(string.Format("Input  : {0}", formatPower(totalInput)));
+	_sb.AppendLine(string.Format("Output : {0}", formatPower(totalOutput)));
+	float net = totalInput - totalOutput;
+	_sb.AppendLine(string.Format("Net    : {1}{0}", formatPower(net), (net >= 0) ? "+" : ""));
+
+	float remaining = (net > 0f) ? totalMax - totalStored : totalStored;
+	float rate      = Math.Abs(net);
+	if (rate > 0f)
+	{
+		float hours   = remaining / rate;
+		int  hh      = (int)hours;
+		int  mm      = (int)((hours - hh) * 60f);
+		int  ss      = (int)((hours - hh - mm / 60f) * 3600f);
+		string label  = (net >= 0f) ? "Full in" : "Empty in";
+		_sb.AppendLine(string.Format("{0,-8}: {1}h {2:D2}m {3:D2}s", label, hh, mm, ss));
+	}
+	else
+	{
+		_sb.AppendLine("Est.   : --");
+	}
+
+	WriteToDisplay(batteryDisplay);
+}
 // ------------------------------------------------------------------------------- Solar
 void SolarAdjust()
 {
 	if (solarPanels == null || solarPanels.Count == 0 || solarAzimuthRotor == null) return;
 	IMySolarPanel solar = solarPanels[0];
-
-
 
 	if (solar != null)
 	{
@@ -586,8 +653,8 @@ void SolarAdjust()
 		_sb.AppendLine("Solar Panels");
 		_sb.AppendLine(string.Format("Power:     {0,11:P8}", SolarPowerOutput));
 		_sb.AppendLine(string.Format("Delta:     {1}{0,11:P8}", delta, (delta >= 0) ? "+" : ""));
-		_sb.AppendLine(string.Format("Generated: {0,7:N3} kW", maxOutput * 1000));
-		_sb.AppendLine(string.Format("Used:      {0,7:N3} kW", totalOutput * 1000));
+		_sb.AppendLine(string.Format("Generated: {0}", formatPower(maxOutput)));
+		_sb.AppendLine(string.Format("Used:      {0}", formatPower(totalOutput)));
 
 		if (solarCTC == null)
 		{		
@@ -783,10 +850,20 @@ bool BlockCountChanged()
 	PastBlockCount = CurrentBlockCount;
 	return changed;
 }
-string 		CreateGPS(string name, Vector3D? pos)
+bool StringContains(string source, string keyword)
+{
+	return source.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0;
+}
+string CreateGPS(string name, Vector3D? pos)
 {
 	if (pos == null) return $"GPS:{name}:::::#FF00FF00:";
 	return $"GPS:{name}:{pos.Value.X:F2}:{pos.Value.Y:F2}:{pos.Value.Z:F2}:#FF00FF00:";
+}
+string formatPower(double power, bool storage = false)
+{
+	if (power < 1) return string.Format("{0,7:N3} kW{1}", power * 1e3, storage ? "h" : "");
+	if (power >= 1e6) return string.Format("{0,7:N3} GW{1}", power / 1e6, storage ? "h" : "");
+	return string.Format("{0,7:N3} MW{1}", power, storage ? "h" : "");
 }
 double[] 	GetXYZ(IMyTerminalBlock block)
 {
