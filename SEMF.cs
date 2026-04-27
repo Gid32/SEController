@@ -47,6 +47,7 @@ List<IMyLightingBlock> reflectorLightsCast = new List<IMyLightingBlock>();
 
 List<IMyAssembler> assemblers = new List<IMyAssembler>();
 List<IMyRefinery> refinerys = new List<IMyRefinery>();
+List<IMyTerminalBlock> nanoBARS = new List<IMyTerminalBlock>();
 
 List<IMyMedicalRoom> RefillPoints = new List<IMyMedicalRoom>();
 List<IMyTextSurfaceProvider> Clocks = new List<IMyTextSurfaceProvider>(); // [Clocks]
@@ -195,7 +196,7 @@ public void Main(string argument, UpdateType updateSource)
 		case 4:	DisplayStoredComponents(); break;
 		case 5: DisplayStoredConsumbles(); break;
 		case 6: DisplayStoredAmmo(); break;
-		case 7: CleanAlgaeFarms(); break;
+		case 7: CleanAlgaeFarms(); CleanNanoBARSs(); break;
 		case 8: CleanRefinerys(); break;
 		case 9: DisplayStoredMaterials(); break;
 		case 10: SolarAdjust(); break;
@@ -228,6 +229,8 @@ void RefreshBlockCache()
 	GridTerminalSystem.GetBlocksOfType<IMyRefinery>(refinerys);
 	GridTerminalSystem.GetBlocksOfType<IMyAssembler>(assemblers);
 	GridTerminalSystem.GetBlocksOfType<IMySolarPanel>(solarPanels);
+	nanoBARS.Clear();
+	foreach (var block in BlocksNamed("BuildAndRepairSystem")) nanoBARS.Add(block);
 
 	GridTerminalSystem.GetBlocksOfType<IMyMedicalRoom>(RefillPoints);
 	Clocks.Clear();
@@ -250,7 +253,7 @@ void RefreshBlockCache()
 	MaterialsInventory 	= (invMatBlock != null) ? invMatBlock.GetInventory(0) : null;
 	ComponentsInventory = (invCompBlock != null) ? invCompBlock.GetInventory(0) : null;
 	ConsumblesInventory = (invConsumblesBlock != null) ? invConsumblesBlock.GetInventory(0) : null;
-	AmmoInventory 			= (invAmmoBlock != null) ? invAmmoBlock.GetInventory(0) : null;
+	AmmoInventory 		= (invAmmoBlock != null) ? invAmmoBlock.GetInventory(0) : null;
 
 	solarAzimuthRotor  = BlockNamed(solarAzimuthRotorKeyword) as IMyMotorStator;
 	solarController    = BlockNamed(SolarPointerRCKeyword) as IMyRemoteControl;
@@ -314,7 +317,7 @@ void DisplayClock(IMyTextSurfaceProvider DisplayBlock, int panel = 0)
 		surface.ScriptForegroundColor = foregroundColor;
 	}
 }
-// ------------------------------------------------------------------------------- Storage
+// ------------------------------------------------------------------------------- Storage Display
 void DisplayStorageContents()
 {
   DisplayStoredMaterials();
@@ -357,15 +360,6 @@ void DisplayStored(IMyInventory inventory, IMyTextSurface display, string title,
 		for (int i = 0; i < items.Count; i++)
 			_sb.AppendLine(string.Format(format, FormatTypeId(items[i]), (double)items[i].Amount));
 		WriteToDisplay(display);
-	}
-}
-string FormatTypeId(MyInventoryItem item)
-{
-	switch (item.Type.TypeId.Split('_')[1])
-	{
-		case "Ore": 			return "Ore " + item.Type.SubtypeId;
-		case "SeedItem": 	return "Seed " + item.Type.SubtypeId;
-		default: 					return item.Type.SubtypeId;
 	}
 }
 // ------------------------------------------------------------------------------- Production
@@ -437,6 +431,24 @@ void CleanAlgaeFarm(IMyFunctionalBlock algaeFarm)
 {
 	if (algaeFarm == null || ConsumblesInventory == null) return;
 	MoveOneItem(algaeFarm.GetInventory(0), ConsumblesInventory);
+}
+void CleanNanoBARSs()
+{
+	if (nanoBARS != null && ComponentsInventory != null)
+	{Me.CustomData = nanoBARS.Count.ToString();
+
+		for (int i = 0; i < nanoBARS.Count; i++)
+		{
+			Me.CustomData += "\n" + nanoBARS[i].CustomName + " " + nanoBARS[i].BlockDefinition.ToString();
+			CleanNanoBARS(nanoBARS[i]);
+		}
+	}
+}
+void CleanNanoBARS(IMyTerminalBlock inventoryBlock)
+{
+	if (inventoryBlock == null) return;
+	else MoveAllItems(inventoryBlock.GetInventory(0), ComponentsInventory);
+
 }
 void SortComponents()
 {
@@ -611,11 +623,11 @@ void DisplayBatteries()
 	_sb.AppendLine("== Batteries ==");
 	_sb.AppendLine(string.Format("Count  : {0,3} / {1,3} (auto)", autoCount, batteries.Count));
 	_sb.AppendLine(string.Format("Charge : {0,7:P1}  {1}", pct, bar));
-	_sb.AppendLine(string.Format("Stored : {0} / {1}", formatPower(totalStored, true), formatPower(totalMax, true)));
-	_sb.AppendLine(string.Format("Input  : {0}", formatPower(totalInput)));
-	_sb.AppendLine(string.Format("Output : {0}", formatPower(totalOutput)));
+	_sb.AppendLine(string.Format("Stored : {0} / {1}", FormatPower(totalStored, true), FormatPower(totalMax, true)));
+	_sb.AppendLine(string.Format("Input  : {0}", FormatPower(totalInput)));
+	_sb.AppendLine(string.Format("Output : {0}", FormatPower(totalOutput)));
 	float net = totalInput - totalOutput;
-	_sb.AppendLine(string.Format("Net    : {1}{0}", formatPower(net), (net >= 0) ? "+" : ""));
+	_sb.AppendLine(string.Format("Net    : {1}{0}", FormatPower(net), (net >= 0) ? "+" : ""));
 
 	float remaining = (net > 0f) ? totalMax - totalStored : totalStored;
 	float rate      = Math.Abs(net);
@@ -653,8 +665,8 @@ void SolarAdjust()
 		_sb.AppendLine("Solar Panels");
 		_sb.AppendLine(string.Format("Power:     {0,11:P8}", SolarPowerOutput));
 		_sb.AppendLine(string.Format("Delta:     {1}{0,11:P8}", delta, (delta >= 0) ? "+" : ""));
-		_sb.AppendLine(string.Format("Generated: {0}", formatPower(maxOutput)));
-		_sb.AppendLine(string.Format("Used:      {0}", formatPower(totalOutput)));
+		_sb.AppendLine(string.Format("Generated: {0}", FormatPower(maxOutput)));
+		_sb.AppendLine(string.Format("Used:      {0}", FormatPower(totalOutput)));
 
 		if (solarCTC == null)
 		{		
@@ -791,6 +803,7 @@ void BlueprintMapFill()
 	assemblerBlueprintMap["GravityGenerator"]     = "GravityGeneratorComponent";
 	assemblerBlueprintMap["RadioCommunication"]   = "RadioCommunicationComponent";
 
+	assemblerBlueprintMap["ShieldComponent"]	   = "ShieldComponentBP";
 
 	// assemblerBlueprintMap["Display"]              = "Display";
 	// assemblerBlueprintMap["PowerCell"]            = "PowerCell";
@@ -824,6 +837,7 @@ void WriteToDisplay(IMyTextSurface surface = null, bool echoToo = false)
 {
   if (surface != null)
   {
+	surface.ContentType = ContentType.TEXT_AND_IMAGE;
     surface.Font = font;
     surface.FontColor = foregroundColor;
     surface.BackgroundColor = backgroundColor;
@@ -859,11 +873,20 @@ string CreateGPS(string name, Vector3D? pos)
 	if (pos == null) return $"GPS:{name}:::::#FF00FF00:";
 	return $"GPS:{name}:{pos.Value.X:F2}:{pos.Value.Y:F2}:{pos.Value.Z:F2}:#FF00FF00:";
 }
-string formatPower(double power, bool storage = false)
+string FormatPower(double power, bool storage = false)
 {
 	if (power < 1) return string.Format("{0,7:N3} kW{1}", power * 1e3, storage ? "h" : "");
 	if (power >= 1e6) return string.Format("{0,7:N3} GW{1}", power / 1e6, storage ? "h" : "");
 	return string.Format("{0,7:N3} MW{1}", power, storage ? "h" : "");
+}
+string FormatTypeId(MyInventoryItem item)
+{
+	switch (item.Type.TypeId.Split('_')[1])
+	{
+		case "Ore": 			return "Ore " + item.Type.SubtypeId;
+		case "SeedItem": 	return "Seed " + item.Type.SubtypeId;
+		default: 					return item.Type.SubtypeId;
+	}
 }
 double[] 	GetXYZ(IMyTerminalBlock block)
 {
