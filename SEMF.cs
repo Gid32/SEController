@@ -615,14 +615,15 @@ void DisplayBatteries()
 		autoCount++;
 	}
 	float pct = (totalMax > 0f) ? totalStored / totalMax : 0f;
-	int barLen = 20;
+	int barLen = 30;
 	int filled = (int)Math.Round(pct * barLen);
-	string bar = "[" + new string('|', filled) + new string(' ', barLen - filled) + "]";
+	string bar = "[" + new string('|', filled) + new string('-', barLen - filled) + "]";
 
 	_sb.Clear();
 	_sb.AppendLine("== Batteries ==");
+	_sb.AppendLine(string.Format("{0}", bar));
 	_sb.AppendLine(string.Format("Count  : {0,3} / {1,3} (auto)", autoCount, batteries.Count));
-	_sb.AppendLine(string.Format("Charge : {0,7:P1}  {1}", pct, bar));
+	_sb.AppendLine(string.Format("Charge : {0,7:P1}", pct));
 	_sb.AppendLine(string.Format("Stored : {0} / {1}", FormatPower(totalStored, true), FormatPower(totalMax, true)));
 	_sb.AppendLine(string.Format("Input  : {0}", FormatPower(totalInput)));
 	_sb.AppendLine(string.Format("Output : {0}", FormatPower(totalOutput)));
@@ -816,14 +817,14 @@ void BlueprintMapFill()
 	// assemblerBlueprintMap["Superconductor"]       = "Superconductor";
 	// assemblerBlueprintMap["BulletproofGlass"]     = "BulletproofGlass";
 }
-void FormatAllDisplays(IMyTextSurfaceProvider DisplayBlock)
+void FormatAllDisplays(IMyTextSurfaceProvider DisplayBlock, bool setContentType = true)
 {
 	for (int i = 0; i < DisplayBlock.SurfaceCount; i++)
 	{
 		var surface = GetTextSurface(DisplayBlock, i);
 		if (surface != null)
 		{
-			surface.ContentType = ContentType.TEXT_AND_IMAGE;
+			if (setContentType) surface.ContentType = ContentType.TEXT_AND_IMAGE;
 			surface.Font = font;
 			surface.FontColor = foregroundColor;
 			surface.BackgroundColor = backgroundColor;
@@ -907,4 +908,10 @@ List<IMyTerminalBlock> 	BlocksNamed(String str)
 	L.Clear();
 	GridTerminalSystem.SearchBlocksOfName(str, L);
 	return L;
+}
+T GetTyped<T>(string nameFilter) where T : class, IMyTerminalBlock
+{
+    var tmp = new List<T>();
+    GridTerminalSystem.GetBlocksOfType<T>(tmp, b => StringContains(b.CustomName, nameFilter));
+    return tmp.Count > 0 ? tmp[0] : null;
 }
