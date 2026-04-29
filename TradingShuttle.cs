@@ -145,6 +145,7 @@ void AquireTarget(int distance)
 		{
 			_sb.AppendLine("No target in sight");
 			_sb.AppendLine(string.Format("Scanned distance: {0:N2} km", distance/1000.0));
+            _sb.AppendLine(CreateGPS("No Target", ScopeCamera.GetPosition() + ScopeCamera.WorldMatrix.Forward * distance));
 		}
 		else
 		{
@@ -152,7 +153,7 @@ void AquireTarget(int distance)
 			_sb.AppendLine(string.Format("Type:     {0}", info.Type));
 			_sb.AppendLine(string.Format("Velocity: {0:N2} m/s", info.Velocity.Length()));
 			_sb.AppendLine(string.Format("Distance: {0:N2} m", Vector3D.Distance(ScopeCamera.GetPosition(), info.Position)));
-			_sb.AppendLine(CreateGPS("Target", info.HitPosition));
+			_sb.AppendLine(CreateGPS(info.Name, info.HitPosition));
 		}
 				
 		_sb.AppendLine(string.Format("Scan range: {0} km", ScopeCamera.AvailableScanRange / 1000));

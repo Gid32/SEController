@@ -493,6 +493,7 @@ void AquireTarget(int distance)
 		{
 			_sb.AppendLine("No target in sight");
 			_sb.AppendLine(string.Format("Scanned distance: {0:N2} km", distance/1000.0));
+            _sb.AppendLine(CreateGPS("No Target", ProbeCamera.GetPosition() + ProbeCamera.WorldMatrix.Forward * distance));
 		}
 		else
 		{
