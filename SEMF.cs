@@ -34,6 +34,10 @@ int SolarRedirects;
 double Proximity, SolarDirectionSwitch;
 double SolarPowerOutput, SolarPowerOutputPrev;
 
+string ClocksKeyword;
+string NanoBARSKeyword;
+string MasterKeyword;
+
 ////////////////////////////////////// LISTS ///////////////////////////////////
 Dictionary<string, string> assemblerBlueprintMap = new Dictionary<string, string>();
 
@@ -125,7 +129,7 @@ public Program()
 	StorageAmmoDisplayKeyword = "[AmmoDisplay]";
 	StorageAmmoDisplayPanel = 0;
 	// Solar -----------------------------------------------------------------------
-	SolarPointerRCKeyword = "[Axis Aligner]";
+	SolarPointerRCKeyword = "[AxisAligner]";
 	solarAzimuthRotorKeyword = "[SolarWing]";
 	SolarDisplayKeyword = "[SolarDisplay]";
 	SolarCTCKeyword = "[SolarCTC]";
@@ -142,6 +146,10 @@ public Program()
 	// Probe -------------------------------------------------------------------
 	ProbeCameraKeyword = "[ScopeCamera]";
 	ProbeDisplayKeyword = "[ScopeTarget]";
+	// Other -------------------------------------------------------------------
+	ClocksKeyword = "[Clock]";
+	NanoBARSKeyword = "BuildAndRepairSystem";
+	MasterKeyword = "[Master]";
 
 	BlueprintMapFill();
 }
@@ -228,13 +236,17 @@ void RefreshBlockCache()
 {
 	GridTerminalSystem.GetBlocksOfType<IMyRefinery>(refinerys);
 	GridTerminalSystem.GetBlocksOfType<IMyAssembler>(assemblers);
+	SetAssemblerCooperativeMode();
+
 	GridTerminalSystem.GetBlocksOfType<IMySolarPanel>(solarPanels);
+
 	nanoBARS.Clear();
-	foreach (var block in BlocksNamed("BuildAndRepairSystem")) nanoBARS.Add(block);
+	foreach (var block in BlocksNamed(NanoBARSKeyword)) nanoBARS.Add(block);
+	SyncNanoBARSSettings();
 
 	GridTerminalSystem.GetBlocksOfType<IMyMedicalRoom>(RefillPoints);
 	Clocks.Clear();
-	foreach (var block in BlocksNamed("[Clock]")) Clocks.Add(block as IMyTextSurfaceProvider);
+	foreach (var block in BlocksNamed(ClocksKeyword)) Clocks.Add(block as IMyTextSurfaceProvider);
 	
 
 	interiorLightsCast.Clear();
@@ -257,6 +269,7 @@ void RefreshBlockCache()
 
 	solarAzimuthRotor  = BlockNamed(solarAzimuthRotorKeyword) as IMyMotorStator;
 	solarController    = BlockNamed(SolarPointerRCKeyword) as IMyRemoteControl;
+	SolarConfigureAxisAligner();
 	solarCTC           = BlockNamed(SolarCTCKeyword) as IMyTurretControlBlock;
 	solarCamera        = BlockNamed(SolarCameraKeyword) as IMyCameraBlock;
 
@@ -449,6 +462,97 @@ void CleanNanoBARS(IMyTerminalBlock inventoryBlock)
 	if (inventoryBlock == null) return;
 	else MoveAllItems(inventoryBlock.GetInventory(0), ComponentsInventory);
 
+}
+void SyncNanoBARSSettings()
+{
+	IMyTerminalBlock master = null;
+	int masterCount = 0;
+	for (int i = 0; i < nanoBARS.Count; i++)
+	{
+		if (StringContains(nanoBARS[i].CustomName, MasterKeyword))
+		{
+			master = nanoBARS[i];
+			masterCount++;
+		}
+	}
+	if (masterCount != 1) return;
+
+	for (int i = 0; i < nanoBARS.Count; i++)
+	{
+		if (ReferenceEquals(nanoBARS[i], master)) continue;
+		SyncNanoBARSBlock(master, nanoBARS[i]);
+	}
+}
+void SyncNanoBARSBlock(IMyTerminalBlock master, IMyTerminalBlock target)
+{
+	// General
+	target.SetValueBool("BuildAndRepair.AllowBuild",       master.GetValueBool("BuildAndRepair.AllowBuild"));
+	target.SetValueBool("BuildAndRepair.ScriptControlled", master.GetValueBool("BuildAndRepair.ScriptControlled"));
+	target.SetValueBool("BuildAndRepair.CollectIfIdle",    master.GetValueBool("BuildAndRepair.CollectIfIdle"));
+	// Search & Work Mode
+	target.SetValue<long>("BuildAndRepair.Mode",     master.GetValue<long>("BuildAndRepair.Mode"));
+	target.SetValue<long>("BuildAndRepair.WorkMode", master.GetValue<long>("BuildAndRepair.WorkMode"));
+	target.SetValue<long>("BuildAndRepair.WeldMode", master.GetValue<long>("BuildAndRepair.WeldMode"));
+	// Colors
+	target.SetValueBool("BuildAndRepair.UseIgnoreColor",   master.GetValueBool("BuildAndRepair.UseIgnoreColor"));
+	target.SetValue<Vector3>("BuildAndRepair.IgnoreColor", master.GetValue<Vector3>("BuildAndRepair.IgnoreColor"));
+	target.SetValueBool("BuildAndRepair.UseGrindColor",    master.GetValueBool("BuildAndRepair.UseGrindColor"));
+	target.SetValue<Vector3>("BuildAndRepair.GrindColor",  master.GetValue<Vector3>("BuildAndRepair.GrindColor"));
+	// Grind Janitor
+	target.SetValueBool("BuildAndRepair.GrindJanitorEnemies",           master.GetValueBool("BuildAndRepair.GrindJanitorEnemies"));
+	target.SetValueBool("BuildAndRepair.GrindJanitorNotOwned",          master.GetValueBool("BuildAndRepair.GrindJanitorNotOwned"));
+	target.SetValueBool("BuildAndRepair.GrindJanitorNeutrals",          master.GetValueBool("BuildAndRepair.GrindJanitorNeutrals"));
+	target.SetValueBool("BuildAndRepair.GrindJanitorOptionDisableOnly", master.GetValueBool("BuildAndRepair.GrindJanitorOptionDisableOnly"));
+	target.SetValueBool("BuildAndRepair.GrindJanitorOptionHackOnly",    master.GetValueBool("BuildAndRepair.GrindJanitorOptionHackOnly"));
+	// Work Area
+	target.SetValue<float>("BuildAndRepair.AreaWidth",           master.GetValue<float>("BuildAndRepair.AreaWidth"));
+	target.SetValue<float>("BuildAndRepair.AreaHeight",          master.GetValue<float>("BuildAndRepair.AreaHeight"));
+	target.SetValue<float>("BuildAndRepair.AreaDepth",           master.GetValue<float>("BuildAndRepair.AreaDepth"));
+	target.SetValue<float>("BuildAndRepair.AreaOffsetLeftRight", master.GetValue<float>("BuildAndRepair.AreaOffsetLeftRight"));
+	target.SetValue<float>("BuildAndRepair.AreaOffsetUpDown",    master.GetValue<float>("BuildAndRepair.AreaOffsetUpDown"));
+	target.SetValue<float>("BuildAndRepair.AreaOffsetFrontBack", master.GetValue<float>("BuildAndRepair.AreaOffsetFrontBack"));
+	// Push / Collect
+	target.SetValueBool("BuildAndRepair.PushIngotOreImmediately", master.GetValueBool("BuildAndRepair.PushIngotOreImmediately"));
+	// Priority Lists
+	SyncNanoBARSPriorityList(master, target, "Weld",    "BuildAndRepair.WeldPriorityList");
+	SyncNanoBARSPriorityList(master, target, "Grind",   "BuildAndRepair.GrindPriorityList");
+	SyncNanoBARSPriorityList(master, target, "Collect", "BuildAndRepair.ComponentClassList");
+}
+void SyncNanoBARSPriorityList(IMyTerminalBlock master, IMyTerminalBlock target, string prefix, string listKey)
+{
+	var list   = master.GetValue<List<string>>(listKey);
+	var getPri = master.GetValue<Func<int, int>>("BuildAndRepair.Get" + prefix + "Priority");
+	var getEn  = master.GetValue<Func<int, bool>>("BuildAndRepair.Get" + prefix + "Enabled");
+	var setPri = target.GetValue<Action<int, int>>("BuildAndRepair.Set" + prefix + "Priority");
+	var setEn  = target.GetValue<Action<int, bool>>("BuildAndRepair.Set" + prefix + "Enabled");
+
+	if (list == null || getPri == null || getEn == null || setPri == null || setEn == null) return;
+	for (int i = 0; i < list.Count; i++)
+	{
+		setPri(i, getPri(i));
+		setEn(i, getEn(i));
+	}
+}
+void SetAssemblerCooperativeMode()
+{
+	IMyAssembler master = null;
+	int masterCount = 0;
+	for (int i = 0; i < assemblers.Count; i++)
+	{
+		if (StringContains(assemblers[i].CustomName, MasterKeyword))
+		{
+			master = assemblers[i];
+			masterCount++;
+		}
+	}
+	if (masterCount != 1) return;
+
+	master.CooperativeMode = false;
+	for (int i = 0; i < assemblers.Count; i++)
+	{
+		if (ReferenceEquals(assemblers[i], master)) continue;
+		assemblers[i].CooperativeMode = true;
+	}
 }
 void SortComponents()
 {
@@ -671,7 +775,6 @@ void SolarAdjust()
 
 		if (solarCTC == null)
 		{		
-			SolarConfigureAxisAligner();
 			if (delta < 0 && Math.Abs(delta) > 3.0 * Proximity)
 			{
 				SolarRedirects++;
@@ -727,6 +830,7 @@ void SolarConfigureAxisAligner()
 	if (solarController != null)
 	{
 		Vector3D pos = solarController.GetPosition();
+		solarController.SpeedLimit = 0;
 		solarController.ClearWaypoints();
 		solarController.ControlThrusters = false;
 		solarController.FlightMode = FlightMode.OneWay;
