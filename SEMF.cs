@@ -445,14 +445,55 @@ void CleanAlgaeFarm(IMyFunctionalBlock algaeFarm)
 	if (algaeFarm == null || ConsumblesInventory == null) return;
 	MoveOneItem(algaeFarm.GetInventory(0), ConsumblesInventory);
 }
+void SetAssemblerCooperativeMode()
+{
+	IMyAssembler master = null;
+	int masterCount = 0;
+	for (int i = 0; i < assemblers.Count; i++)
+	{
+		if (StringContains(assemblers[i].CustomName, MasterKeyword))
+		{
+			master = assemblers[i];
+			masterCount++;
+		}
+	}
+	if (masterCount != 1) return;
+
+	master.CooperativeMode = false;
+	for (int i = 0; i < assemblers.Count; i++)
+	{
+		if (ReferenceEquals(assemblers[i], master)) continue;
+		assemblers[i].CooperativeMode = true;
+	}
+}
+void SortComponents()
+{
+	items.Clear();
+	ComponentsInventory.GetItems(items);
+
+	for (int i = items.Count - 1; i >= 0; i--)
+	{
+		switch (items[i].Type.TypeId.Split('_')[1])
+		{
+			case "Ingot":
+			case "Ore":
+			  MoveOneItem(ComponentsInventory, MaterialsInventory, i);	break;
+			case "SeedItem":
+			case "ConsumableItem":
+			  MoveOneItem(ComponentsInventory, ConsumblesInventory, i);	break;
+			case "PhysicalGunObject":
+			case "AmmoMagazine":
+			  MoveOneItem(ComponentsInventory, AmmoInventory, i);			  break;
+		}
+	}
+}
+// ------------------------------------------------------------------------------- NanoBARS
 void CleanNanoBARSs()
 {
 	if (nanoBARS != null && ComponentsInventory != null)
-	{Me.CustomData = nanoBARS.Count.ToString();
-
+	{
 		for (int i = 0; i < nanoBARS.Count; i++)
 		{
-			Me.CustomData += "\n" + nanoBARS[i].CustomName + " " + nanoBARS[i].BlockDefinition.ToString();
 			CleanNanoBARS(nanoBARS[i]);
 		}
 	}
@@ -533,48 +574,6 @@ void SyncNanoBARSPriorityList(IMyTerminalBlock master, IMyTerminalBlock target, 
 		setEn(i, getEn(i));
 	}
 }
-void SetAssemblerCooperativeMode()
-{
-	IMyAssembler master = null;
-	int masterCount = 0;
-	for (int i = 0; i < assemblers.Count; i++)
-	{
-		if (StringContains(assemblers[i].CustomName, MasterKeyword))
-		{
-			master = assemblers[i];
-			masterCount++;
-		}
-	}
-	if (masterCount != 1) return;
-
-	master.CooperativeMode = false;
-	for (int i = 0; i < assemblers.Count; i++)
-	{
-		if (ReferenceEquals(assemblers[i], master)) continue;
-		assemblers[i].CooperativeMode = true;
-	}
-}
-void SortComponents()
-{
-	items.Clear();
-	ComponentsInventory.GetItems(items);
-
-	for (int i = items.Count - 1; i >= 0; i--)
-	{
-		switch (items[i].Type.TypeId.Split('_')[1])
-		{
-			case "Ingot":
-			case "Ore":
-			  MoveOneItem(ComponentsInventory, MaterialsInventory, i);	break;
-			case "SeedItem":
-			case "ConsumableItem":
-			  MoveOneItem(ComponentsInventory, ConsumblesInventory, i);	break;
-			case "PhysicalGunObject":
-			case "AmmoMagazine":
-			  MoveOneItem(ComponentsInventory, AmmoInventory, i);			  break;
-		}
-	}
-}
 // ------------------------------------------------------------------------------- Probe
 MyDetectedEntityInfo GetCameraTarget(IMyCameraBlock camera, double distance = 5000)
 {
@@ -597,7 +596,7 @@ void AquireTarget(int distance)
 		{
 			_sb.AppendLine("No target in sight");
 			_sb.AppendLine(string.Format("Scanned distance: {0:N2} km", distance/1000.0));
-            _sb.AppendLine(CreateGPS("No Target", ProbeCamera.GetPosition() + ProbeCamera.WorldMatrix.Forward * distance));
+      _sb.AppendLine(CreateGPS("No Target", ProbeCamera.GetPosition() + ProbeCamera.WorldMatrix.Forward * distance));
 		}
 		else
 		{
@@ -605,7 +604,7 @@ void AquireTarget(int distance)
 			_sb.AppendLine(string.Format("Type:     {0}", info.Type));
 			_sb.AppendLine(string.Format("Velocity: {0:N2} m/s", info.Velocity.Length()));
 			_sb.AppendLine(string.Format("Distance: {0:N2} m", Vector3D.Distance(ProbeCamera.GetPosition(), info.Position)));
-			_sb.AppendLine(CreateGPS("Target", info.HitPosition));
+			_sb.AppendLine(CreateGPS(info.Name, info.HitPosition));
 		}
 				
 		_sb.AppendLine(string.Format("Scan range: {0} km", ProbeCamera.AvailableScanRange / 1000));
