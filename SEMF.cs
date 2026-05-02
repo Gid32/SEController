@@ -575,19 +575,12 @@ void SyncNanoBARSPriorityList(IMyTerminalBlock master, IMyTerminalBlock target, 
 	}
 }
 // ------------------------------------------------------------------------------- Probe
-MyDetectedEntityInfo GetCameraTarget(IMyCameraBlock camera, double distance = 5000)
-{
-	if (!camera.EnableRaycast)
-		camera.EnableRaycast = true;
-	if (camera.CanScan(distance)) return camera.Raycast((float)distance);
-	return new MyDetectedEntityInfo();
-}
 void AquireTarget(int distance)
 {
 	_sb.Clear();
 	_sb.AppendLine("== Probe ==");
-  if (ProbeCamera == null)
-  {
+    if (ProbeCamera == null)
+    {
     _sb.AppendLine("No camera found: " + ProbeCameraKeyword);
 	}
 	else {
@@ -596,18 +589,30 @@ void AquireTarget(int distance)
 		{
 			_sb.AppendLine("No target in sight");
 			_sb.AppendLine(string.Format("Scanned distance: {0:N2} km", distance/1000.0));
-      _sb.AppendLine(CreateGPS("No Target", ProbeCamera.GetPosition() + ProbeCamera.WorldMatrix.Forward * distance));
+            _sb.AppendLine(CreateGPS("No Target", ProbeCamera.GetPosition() + ProbeCamera.WorldMatrix.Forward * distance));
 		}
 		else
 		{
 			_sb.AppendLine(string.Format("Target:   {0}", info.Name));
 			_sb.AppendLine(string.Format("Type:     {0}", info.Type));
-			_sb.AppendLine(string.Format("Velocity: {0:N2} m/s", info.Velocity.Length()));
-			_sb.AppendLine(string.Format("Distance: {0:N2} m", Vector3D.Distance(ProbeCamera.GetPosition(), info.Position)));
-			_sb.AppendLine(CreateGPS(info.Name, info.HitPosition));
+            switch (info.Type)
+            {
+                case MyDetectedEntityType.LargeGrid:
+                case MyDetectedEntityType.SmallGrid:
+                    _sb.AppendLine(string.Format("Grid size: {0}", info.BoundingBox.Size));
+                    _sb.AppendLine(string.Format("Velocity: {0:N2} m/s", info.Velocity.Length()));
+                    _sb.AppendLine(string.Format("Distance: {0:N2} m", Vector3D.Distance(ProbeCamera.GetPosition(), info.Position)));
+                    break;
+                case MyDetectedEntityType.Asteroid:
+                case MyDetectedEntityType.Planet:
+                    _sb.AppendLine(string.Format("Radius: {0:N2} m", info.BoundingBox.Size.Length() / 2));
+                    _sb.AppendLine(CreateGPS(info.Name + " Center", info.Position));
+                    break;
+            }
+            _sb.AppendLine(CreateGPS(info.Name, info.HitPosition));
 		}
 				
-		_sb.AppendLine(string.Format("Scan range: {0} km", ProbeCamera.AvailableScanRange / 1000));
+		_sb.AppendLine(string.Format("Scan range: {0:N2} km", ProbeCamera.AvailableScanRange / 1000));
 		_sb.AppendLine(string.Format("Scan cooldown: {0} s", ProbeCamera.TimeUntilScan(20000) / 1000));
 		_sb.AppendLine(string.Format("Distance limit: {0}", ProbeCamera.RaycastDistanceLimit));
 		_sb.AppendLine(string.Format("Time multiplier: {0}", ProbeCamera.RaycastTimeMultiplier));
@@ -996,6 +1001,13 @@ string FormatTypeId(MyInventoryItem item)
 double[] 	GetXYZ(IMyTerminalBlock block)
 {
 	return new double[] { block.GetPosition().GetDim(0), block.GetPosition().GetDim(1), block.GetPosition().GetDim(2) };
+}
+MyDetectedEntityInfo GetCameraTarget(IMyCameraBlock camera, double distance = 5000)
+{
+	if (!camera.EnableRaycast)
+		camera.EnableRaycast = true;
+	if (camera.CanScan(distance)) return camera.Raycast((float)distance);
+	return new MyDetectedEntityInfo();
 }
 IMyTextSurface 					GetTextSurface(IMyTextSurfaceProvider DisplayBlock, int panel = 0)
 {

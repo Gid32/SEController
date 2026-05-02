@@ -1,8 +1,8 @@
-string ScopeCameraKeyword;
-int    ScopeDisplayPanel;
+string ProbeCameraKeyword;
+int    ProbeDisplayPanel;
 
-List<IMyTextSurfaceProvider> ScopeDisplay = new List<IMyTextSurfaceProvider>();
-IMyCameraBlock ScopeCamera;
+List<IMyTextSurfaceProvider> ProbeDisplay = new List<IMyTextSurfaceProvider>();
+IMyCameraBlock ProbeCamera;
 
 const string PREFIX       = "TSH";
 
@@ -11,9 +11,7 @@ IMyShipConnector         _connector;
 IMyRadioAntenna          _antenna;
 IMyOreDetector           _oreDetector;
 IMyBatteryBlock          _battery;
-IMyShipController        _cockpit;
-IMyFlightMovementBlock   _aiMove;   
-IMyPathRecorderBlock     _aiRec;    
+IMyShipController        _cockpit; 
 
 List<IMyGyro>   _gyros     = new List<IMyGyro>();
 List<IMyThrust> _thrusters = new List<IMyThrust>();
@@ -30,8 +28,8 @@ const string font = "Monospace";
 public Program()
 {
     Runtime.UpdateFrequency = UpdateFrequency.None;
-    ScopeCameraKeyword = "[TSHScopeCamera]";
-    ScopeDisplayPanel = 1;
+    ProbeCameraKeyword = "[TSHProbeCamera]";
+    ProbeDisplayPanel = 1;
     RefreshBlockCache();
     FormatAllDisplays(Me);
     FormatAllDisplays(_cockpit as IMyTextSurfaceProvider, false);
@@ -61,12 +59,8 @@ void Undock()
     Echo("Undocking...");
     _connector.Disconnect();
     if (!_connector.IsConnected) { 
-      SetCollisionAvoidance(true);
-      SetPrecisionMode(true);
       SetThrusters(true);
       SetGyros(true);
-      _aiRec.Enabled = false;
-      _aiMove.Enabled = false;
       _gyros.ForEach(g => g.Enabled = true);
       _thrusters.ForEach(t => t.Enabled = true);
       _antenna.Enabled = true;
@@ -80,12 +74,8 @@ void DockingSequence()
   if (BlocksIntact())
   {
     Echo("Starting docking sequence...");
-    SetCollisionAvoidance(true);
-    SetPrecisionMode(true);
     SetThrusters(true);
     SetGyros(true);
-    _aiRec.Enabled = true;
-    _aiMove.Enabled = true;
   }
   else Echo("Cannot start docking sequence: blocks missing!");
 }
@@ -94,8 +84,6 @@ void Dock()
   if (BlocksIntact())
   {
     Echo("Docking...");
-    SetCollisionAvoidance(true);
-    SetPrecisionMode(true);
     SetThrusters(true);
     SetGyros(true);
     _connector.Connect();
@@ -103,8 +91,6 @@ void Dock()
       _antenna.Enabled = false;
       _oreDetector.Enabled = false;
       _connector.Connect();
-      _aiMove.Enabled = false;
-      _aiRec.Enabled = false;
       _gyros.ForEach(g => g.Enabled = false);
       _thrusters.ForEach(t => t.Enabled = false);
     }
@@ -120,50 +106,52 @@ void SetThrusters(bool on)
 {
     for (int i = 0; i < _thrusters.Count; i++) _thrusters[i].Enabled = on;
 }
-void SetCollisionAvoidance(bool on)
-{
-    // IMyFlightMovementBlock exposes CollisionAvoidance as a direct bool property.
-    if (_aiMove != null) _aiMove.CollisionAvoidance = on;
-}
-void SetPrecisionMode(bool on)
-{
-    // IMyFlightMovementBlock exposes PrecisionMode as a direct bool property.
-    if (_aiMove != null) _aiMove.PrecisionMode = on;
-}
 // -- Target Display -------------------------------------------------------------
 void AquireTarget(int distance)
 {
 	_sb.Clear();
 	_sb.AppendLine("== Probe ==");
-  if (ScopeCamera == null)
-  {
-    _sb.AppendLine("No camera found: " + ScopeCameraKeyword);
+    if (ProbeCamera == null)
+    {
+    _sb.AppendLine("No camera found: " + ProbeCameraKeyword);
 	}
 	else {
-		MyDetectedEntityInfo info = GetCameraTarget(ScopeCamera, distance);
+		MyDetectedEntityInfo info = GetCameraTarget(ProbeCamera, distance);
 		if (info.IsEmpty()) 
 		{
 			_sb.AppendLine("No target in sight");
 			_sb.AppendLine(string.Format("Scanned distance: {0:N2} km", distance/1000.0));
-            _sb.AppendLine(CreateGPS("No Target", ScopeCamera.GetPosition() + ScopeCamera.WorldMatrix.Forward * distance));
+            _sb.AppendLine(CreateGPS("No Target", ProbeCamera.GetPosition() + ProbeCamera.WorldMatrix.Forward * distance));
 		}
 		else
 		{
 			_sb.AppendLine(string.Format("Target:   {0}", info.Name));
 			_sb.AppendLine(string.Format("Type:     {0}", info.Type));
-			_sb.AppendLine(string.Format("Velocity: {0:N2} m/s", info.Velocity.Length()));
-			_sb.AppendLine(string.Format("Distance: {0:N2} m", Vector3D.Distance(ScopeCamera.GetPosition(), info.Position)));
-			_sb.AppendLine(CreateGPS(info.Name, info.HitPosition));
+            switch (info.Type)
+            {
+                case MyDetectedEntityType.LargeGrid:
+                case MyDetectedEntityType.SmallGrid:
+                    _sb.AppendLine(string.Format("Grid size: {0}", info.BoundingBox.Size));
+                    _sb.AppendLine(string.Format("Velocity: {0:N2} m/s", info.Velocity.Length()));
+                    _sb.AppendLine(string.Format("Distance: {0:N2} m", Vector3D.Distance(ProbeCamera.GetPosition(), info.Position)));
+                    break;
+                case MyDetectedEntityType.Asteroid:
+                case MyDetectedEntityType.Planet:
+                    _sb.AppendLine(string.Format("Radius: {0:N2} m", info.BoundingBox.Size.Length() / 2));
+                    _sb.AppendLine(CreateGPS(info.Name + " Center", info.Position));
+                    break;
+            }
+            _sb.AppendLine(CreateGPS(info.Name, info.HitPosition));
 		}
 				
-		_sb.AppendLine(string.Format("Scan range: {0} km", ScopeCamera.AvailableScanRange / 1000));
-		_sb.AppendLine(string.Format("Scan cooldown: {0} s", ScopeCamera.TimeUntilScan(20000) / 1000));
-		_sb.AppendLine(string.Format("Distance limit: {0}", ScopeCamera.RaycastDistanceLimit));
-		_sb.AppendLine(string.Format("Time multiplier: {0}", ScopeCamera.RaycastTimeMultiplier));
+		_sb.AppendLine(string.Format("Scan range: {0:N2} km", ProbeCamera.AvailableScanRange / 1000));
+		_sb.AppendLine(string.Format("Scan cooldown: {0} s", ProbeCamera.TimeUntilScan(20000) / 1000));
+		_sb.AppendLine(string.Format("Distance limit: {0}", ProbeCamera.RaycastDistanceLimit));
+		_sb.AppendLine(string.Format("Time multiplier: {0}", ProbeCamera.RaycastTimeMultiplier));
 	}
-	for (int i = 0; i < ScopeDisplay.Count; i++)
+	for (int i = 0; i < ProbeDisplay.Count; i++)
 	{
-		WriteToDisplay(GetTextSurface(ScopeDisplay[i],ScopeDisplayPanel), true);
+		WriteToDisplay(GetTextSurface(ProbeDisplay[i],ProbeDisplayPanel), true);
 	}
 }
 // -- Status Display -------------------------------------------------------------
@@ -173,8 +161,6 @@ void WriteStatus()
     _sb.AppendLine("=== TSH Docking Controller ===");
     if (_connector != null) _sb.AppendLine(string.Format("Connector: {0}", _connector.Status));
     if (_battery   != null) _sb.AppendLine(string.Format("Battery:   {0}", _battery.ChargeMode));
-    if (_aiMove    != null) _sb.AppendLine(string.Format("AI Move:   {0}", _aiMove.IsAutoPilotEnabled ? "Active" : "Idle"));
-    if (_aiRec     != null) _sb.AppendLine(string.Format("AI Rec:    {0}", _aiRec.Enabled ? "On"     : "Off"));
     if (_antenna   != null) _sb.AppendLine(string.Format("Antenna:   {0}", _antenna.Enabled ? "On" : "Off"));
     if (_cockpit   != null) _sb.AppendLine(string.Format("Speed:     {0:F2} m/s", _cockpit.GetShipVelocities().LinearVelocity.Length()));
     string text = _sb.ToString();
@@ -187,8 +173,6 @@ bool BlocksIntact()
     return _connector != null
         && _battery != null
         && _cockpit != null
-        && _aiMove != null
-        && _aiRec != null
         && _gyros.Count > 0
         && _antenna != null
         && _thrusters.Count > 0;
@@ -198,12 +182,10 @@ void RefreshBlockCache()
     _connector = GetTyped<IMyShipConnector>(PREFIX);
     _battery   = GetTyped<IMyBatteryBlock>(PREFIX);
     _cockpit   = GetTyped<IMyShipController>(PREFIX);
-    _aiMove    = GetTyped<IMyFlightMovementBlock>(PREFIX); 
-    _aiRec     = GetTyped<IMyPathRecorderBlock>(PREFIX); 
     _antenna   = GetTyped<IMyRadioAntenna>(PREFIX);
     _oreDetector = GetTyped<IMyOreDetector>(PREFIX);
-    ScopeCamera  = GetTyped<IMyCameraBlock>(ScopeCameraKeyword);
-    ScopeDisplay.Add(_cockpit as IMyTextSurfaceProvider);
+    ProbeCamera  = GetTyped<IMyCameraBlock>(ProbeCameraKeyword);
+    ProbeDisplay.Add(_cockpit as IMyTextSurfaceProvider);
     //_aiRecComp = _aiRec.Components.Get<IMyPathRecorderComponent>();
 
     _gyros.Clear();
@@ -215,12 +197,10 @@ void RefreshBlockCache()
         b => StringContains(b.CustomName, PREFIX));
 
     Echo(string.Format(
-        "Cache - conn:{0} bat:{1} gyros:{2} thrust:{3} aiMove:{4} aiRec:{5} antenna:{6}",
+        "Cache - conn:{0} bat:{1} gyros:{2} thrust:{3} antenna:{4}",
         _connector != null ? "OK" : "!",
         _battery   != null ? "OK" : "!",
         _gyros.Count, _thrusters.Count,
-        _aiMove    != null ? "OK" : "!",
-        _aiRec     != null ? "OK" : "!",
         _antenna   != null ? "OK" : "!"));
 }
 // -- SEMF Utilities -------------------------------------------------------------
