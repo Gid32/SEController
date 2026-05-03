@@ -144,8 +144,8 @@ public Program()
 	BatteryDisplayKeyword = "[BatteryDisplay]";
 	BatteryDisplayPanel = 0;
 	// Probe -------------------------------------------------------------------
-	ProbeCameraKeyword = "[ScopeCamera]";
-	ProbeDisplayKeyword = "[ScopeTarget]";
+	ProbeCameraKeyword = "[ProbeCamera]";
+	ProbeDisplayKeyword = "[ProbeTarget]";
 	// Other -------------------------------------------------------------------
 	ClocksKeyword = "[Clock]";
 	NanoBARSKeyword = "BuildAndRepairSystem";
@@ -180,8 +180,11 @@ public void Main(string argument, UpdateType updateSource)
 	}
 	if (StringContains(argument, "formatdisplay"))
 	{
-		string keyword = argument.Trim().Split(' ')[1];
-		FormatAllDisplays(BlockNamed(keyword) as IMyTextSurfaceProvider);
+		string keyword = argument.Trim().Split(' ')[1].Trim();
+		foreach (var block in BlocksNamed(keyword))
+		{
+			FormatAllDisplays(block as IMyTextSurfaceProvider);
+		}
 		return;
 	}
 // ------------------------------- MAIN UPDATE LOOP ---------------------------
@@ -926,7 +929,20 @@ void BlueprintMapFill()
 	// assemblerBlueprintMap["Superconductor"]       = "Superconductor";
 	// assemblerBlueprintMap["BulletproofGlass"]     = "BulletproofGlass";
 }
-void FormatAllDisplays(IMyTextSurfaceProvider DisplayBlock, bool setContentType = true)
+void FormatDisplay(IMyTextSurface surface, bool setContentType = true)
+{
+	if (surface != null)
+	{
+		if (setContentType) surface.ContentType = ContentType.TEXT_AND_IMAGE;
+		surface.Font = font;
+		surface.FontColor = foregroundColor;
+		surface.BackgroundColor = backgroundColor;
+
+		surface.ScriptBackgroundColor = backgroundColor;
+		surface.ScriptForegroundColor = foregroundColor;
+	}
+}
+void FormatAllDisplays(IMyTextSurfaceProvider DisplayBlock, bool setContentType = false)
 {
 	for (int i = 0; i < DisplayBlock.SurfaceCount; i++)
 	{
@@ -934,12 +950,7 @@ void FormatAllDisplays(IMyTextSurfaceProvider DisplayBlock, bool setContentType 
 		if (surface != null)
 		{
 			if (setContentType) surface.ContentType = ContentType.TEXT_AND_IMAGE;
-			surface.Font = font;
-			surface.FontColor = foregroundColor;
-			surface.BackgroundColor = backgroundColor;
-
-			surface.ScriptBackgroundColor = backgroundColor;
-			surface.ScriptForegroundColor = foregroundColor;
+			FormatDisplay(surface, setContentType);
 		}
 	}
 }
@@ -947,10 +958,7 @@ void WriteToDisplay(IMyTextSurface surface = null, bool echoToo = false)
 {
   if (surface != null)
   {
-	surface.ContentType = ContentType.TEXT_AND_IMAGE;
-    surface.Font = font;
-    surface.FontColor = foregroundColor;
-    surface.BackgroundColor = backgroundColor;
+		FormatDisplay(surface);
     surface.WriteText(_sb);
   }
   else
