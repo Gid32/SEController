@@ -207,7 +207,7 @@ public void Main(string argument, UpdateType updateSource)
 		case 4:	DisplayStoredComponents(); break;
 		case 5: DisplayStoredConsumbles(); break;
 		case 6: DisplayStoredAmmo(); break;
-		case 7: CleanAlgaeFarms(); CleanNanoBARSs(); break;
+		case 7: CleanAlgaeFarms(); CleanNanoBARSs(); NanoBARSGrindControl(); break;
 		case 8: CleanRefinerys(); break;
 		case 9: DisplayStoredMaterials(); break;
 		case 10: SolarAdjust(); break;
@@ -558,23 +558,52 @@ void SyncNanoBARSBlock(IMyTerminalBlock master, IMyTerminalBlock target)
 	// Push / Collect
 	target.SetValueBool("BuildAndRepair.PushIngotOreImmediately", master.GetValueBool("BuildAndRepair.PushIngotOreImmediately"));
 	// Priority Lists
-	SyncNanoBARSPriorityList(master, target, "Weld",    "BuildAndRepair.WeldPriorityList");
-	SyncNanoBARSPriorityList(master, target, "Grind",   "BuildAndRepair.GrindPriorityList");
-	SyncNanoBARSPriorityList(master, target, "Collect", "BuildAndRepair.ComponentClassList");
+	SyncNanoBARSPriorityList(master, target, "Weld");
+	SyncNanoBARSPriorityList(master, target, "Grind");
+	SyncNanoBARSPriorityList(master, target, "Collect");
 }
-void SyncNanoBARSPriorityList(IMyTerminalBlock master, IMyTerminalBlock target, string prefix, string listKey)
+void SyncNanoBARSPriorityList(IMyTerminalBlock master, IMyTerminalBlock target, string prefix)
 {
-	var list   = master.GetValue<List<string>>(listKey);
 	var getPri = master.GetValue<Func<int, int>>("BuildAndRepair.Get" + prefix + "Priority");
 	var getEn  = master.GetValue<Func<int, bool>>("BuildAndRepair.Get" + prefix + "Enabled");
 	var setPri = target.GetValue<Action<int, int>>("BuildAndRepair.Set" + prefix + "Priority");
 	var setEn  = target.GetValue<Action<int, bool>>("BuildAndRepair.Set" + prefix + "Enabled");
 
-	if (list == null || getPri == null || getEn == null || setPri == null || setEn == null) return;
-	for (int i = 0; i < list.Count; i++)
+	if (getPri == null || getEn == null || setPri == null || setEn == null) return;
+	for (int i = 0; i < 32; i++)
 	{
-		setPri(i, getPri(i));
-		setEn(i, getEn(i));
+		try { setPri(i, getPri(i)); setEn(i, getEn(i)); }
+		catch { break; }
+	}
+}
+// Protect prototech blocks from being grinded by any BaRS.
+// Requires BuildAndRepair.ScriptControlled = true on the master (synced to all).
+void NanoBARSGrindControl()
+{
+	for (int i = 0; i < nanoBARS.Count; i++)
+	{
+		var bar = nanoBARS[i];
+		if (!bar.GetValueBool("BuildAndRepair.ScriptControlled")) continue;
+
+		// Weld: pass through the first available target unchanged
+		var weldTargets = bar.GetValue<List<IMySlimBlock>>("BuildAndRepair.PossibleTargets");
+		bar.SetValue<IMySlimBlock>("BuildAndRepair.CurrentPickedTarget",
+			(weldTargets != null && weldTargets.Count > 0) ? weldTargets[0] : null);
+
+		// Grind: warheads first, then any non-prototech block
+		var grindTargets = bar.GetValue<List<IMySlimBlock>>("BuildAndRepair.PossibleGrindTargets");
+		IMySlimBlock picked = null;
+		if (grindTargets != null)
+		{
+			for (int j = 0; j < grindTargets.Count; j++)
+			{
+				var fat = grindTargets[j].FatBlock;
+				if (fat is IMyWarhead) { picked = grindTargets[j]; break; }
+				if (picked == null && !(fat != null && StringContains(fat.BlockDefinition.SubtypeId, "Prototech")))
+					picked = grindTargets[j];
+			}
+		}
+		bar.SetValue<IMySlimBlock>("BuildAndRepair.CurrentPickedGrindTarget", picked);
 	}
 }
 // ------------------------------------------------------------------------------- Probe
