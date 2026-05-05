@@ -37,6 +37,11 @@ double SolarPowerOutput, SolarPowerOutputPrev;
 string ClocksKeyword;
 string NanoBARSKeyword;
 string MasterKeyword;
+bool nanoUseIgnoreColor;
+Vector3 nanoIgnoreHSV;
+// SE ColorMaskHSV stores offsets from the base grey; BaRS stores absolute HSV (H:0-360, S:0-100, V:0-100)
+const float SE_COLOR_BASE_S = 0.80f;
+const float SE_COLOR_BASE_V = 0.45f;
 
 ////////////////////////////////////// LISTS ///////////////////////////////////
 Dictionary<string, string> assemblerBlueprintMap = new Dictionary<string, string>();
@@ -521,6 +526,17 @@ void SyncNanoBARSSettings()
 	}
 	if (masterCount != 1) return;
 
+	nanoUseIgnoreColor = master.GetValueBool("BuildAndRepair.UseIgnoreColor");
+	if (nanoUseIgnoreColor)
+	{
+		try
+		{
+			Vector3 bars = master.GetValue<Vector3>("BuildAndRepair.IgnoreColor");
+			nanoIgnoreHSV = new Vector3(bars.X / 360f, bars.Y / 100f - SE_COLOR_BASE_S, bars.Z / 100f - SE_COLOR_BASE_V);
+		}
+		catch { nanoUseIgnoreColor = false; }
+	}
+
 	for (int i = 0; i < nanoBARS.Count; i++)
 	{
 		if (ReferenceEquals(nanoBARS[i], master)) continue;
@@ -583,28 +599,40 @@ void NanoBARSGrindControl()
 	for (int i = 0; i < nanoBARS.Count; i++)
 	{
 		var bar = nanoBARS[i];
-		if (!bar.GetValueBool("BuildAndRepair.ScriptControlled")) continue;
-
+		if (!bar.GetValueBool("BuildAndRepair.ScriptControlled") || !(bar as IMyTerminalBlock).IsWorking) continue;
 		// Weld: pass through the first available target unchanged
 		var weldTargets = bar.GetValue<List<IMySlimBlock>>("BuildAndRepair.PossibleTargets");
 		bar.SetValue<IMySlimBlock>("BuildAndRepair.CurrentPickedTarget",
 			(weldTargets != null && weldTargets.Count > 0) ? weldTargets[0] : null);
 
-		// Grind: warheads first, then any non-prototech block
+		// Grind: warheads first, then first non-prototech non-ignored block
 		var grindTargets = bar.GetValue<List<IMySlimBlock>>("BuildAndRepair.PossibleGrindTargets");
 		IMySlimBlock picked = null;
-		if (grindTargets != null)
+		
+		if (grindTargets != null && grindTargets.Count > 0)
 		{
 			for (int j = 0; j < grindTargets.Count; j++)
 			{
-				var fat = grindTargets[j].FatBlock;
-				if (fat is IMyWarhead) { picked = grindTargets[j]; break; }
-				if (picked == null && !(fat != null && StringContains(fat.BlockDefinition.SubtypeId, "Prototech")))
-					picked = grindTargets[j];
+				var slim = grindTargets[j];
+
+				if (slim == null) continue;
+				var fat  = slim.FatBlock;
+
+				if (fat != null && StringContains(fat.BlockDefinition.SubtypeId, "Prototech")){continue;} // Exclude prototech blocks entirely
+				if (nanoUseIgnoreColor && HSVMatches(slim.ColorMaskHSV, nanoIgnoreHSV)){continue;} // Exclude blocks matching the ignore color
+				if (fat is IMyWarhead) { picked = slim;	break; } // Prioritize warheads for grinding
+				if (picked == null) picked = slim; // Pick the first valid target as fallback if no warheads are found
 			}
 		}
 		bar.SetValue<IMySlimBlock>("BuildAndRepair.CurrentPickedGrindTarget", picked);
 	}
+	Me.CustomData = _sb.ToString();
+}
+bool HSVMatches(Vector3 a, Vector3 b, float tolerance = 0.05f)
+{
+	return Math.Abs(a.X - b.X) <= tolerance &&
+	       Math.Abs(a.Y - b.Y) <= tolerance &&
+	       Math.Abs(a.Z - b.Z) <= tolerance;
 }
 // ------------------------------------------------------------------------------- Probe
 void AquireTarget(int distance)
