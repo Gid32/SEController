@@ -212,8 +212,8 @@ public void Main(string argument, UpdateType updateSource)
 		case 4:	DisplayStoredComponents(); break;
 		case 5: DisplayStoredConsumbles(); break;
 		case 6: DisplayStoredAmmo(); break;
-		case 7: CleanAlgaeFarms(); CleanNanoBARSs(); NanoBARSGrindControl(); break;
-		case 8: CleanRefinerys(); break;
+		case 7: CleanNanoBARSs(); NanoBARSGrindControl(); break;
+		case 8: CleanRefinerys(); /*CleanAlgaeFarms();*/ break;
 		case 9: DisplayStoredMaterials(); break;
 		case 10: SolarAdjust(); break;
 		case 11: DisplayBatteries(); break;
@@ -543,11 +543,11 @@ void SyncNanoBARSSettings()
 		SyncNanoBARSBlock(master, nanoBARS[i]);
 	}
 }
-void SyncNanoBARSBlock(IMyTerminalBlock master, IMyTerminalBlock target)
+void SyncNanoBARSBlock(IMyTerminalBlock master, IMyTerminalBlock target, bool scripted = true)
 {
 	// General
 	target.SetValueBool("BuildAndRepair.AllowBuild",       master.GetValueBool("BuildAndRepair.AllowBuild"));
-	target.SetValueBool("BuildAndRepair.ScriptControlled", master.GetValueBool("BuildAndRepair.ScriptControlled"));
+	target.SetValueBool("BuildAndRepair.ScriptControlled", scripted || master.GetValueBool("BuildAndRepair.ScriptControlled"));
 	target.SetValueBool("BuildAndRepair.CollectIfIdle",    master.GetValueBool("BuildAndRepair.CollectIfIdle"));
 	// Search & Work Mode
 	target.SetValue<long>("BuildAndRepair.Mode",     master.GetValue<long>("BuildAndRepair.Mode"));
@@ -592,8 +592,6 @@ void SyncNanoBARSPriorityList(IMyTerminalBlock master, IMyTerminalBlock target, 
 		catch { break; }
 	}
 }
-// Protect prototech blocks from being grinded by any BaRS.
-// Requires BuildAndRepair.ScriptControlled = true on the master (synced to all).
 void NanoBARSGrindControl()
 {
 	for (int i = 0; i < nanoBARS.Count; i++)
@@ -711,6 +709,7 @@ void ProcessAssemblerQueue(IMyTerminalBlock storageBlock)
 	{
 	if(assemblers[i].DefinitionDisplayNameText.Contains("Survival Kit")) continue;
 	if(assemblers[i].DefinitionDisplayNameText.Contains("Food Processor")) continue;
+	if(assemblers[i].DefinitionDisplayNameText.Contains("Prototach Assembler")) continue;
 
 	if (target == null && assemblers[i].Mode == MyAssemblerMode.Assembly && !assemblers[i].CooperativeMode) 
 	{
