@@ -1,48 +1,60 @@
 // SEMF - Space Engineers Management Framework
 // https://malforge.github.io/spaceengineers/pbapi/
+
+////////////////////////////////////// CONSTANTS ///////////////////////////////////
+const string font = "Monospace";
+const float SE_COLOR_BASE_S = 0.80f;
+const float SE_COLOR_BASE_V = 0.45f;
+const int LightRadius = 10;
+const int TickerLimit = 12;
+// Keywords
+const string ExclusionKeyword    = "[TechLight]";
+const string MasterKeyword       = "[Master]";
+const string ClocksKeyword       = "[Clock]";
+const string NanoBARSKeyword     = "BuildAndRepairSystem";
+// Storage keywords
+const string StorageMaterialsKeyword         = "[Materials]";
+const string StorageComponentsKeyword        = "[Components]";
+const string StorageConsumblesKeyword        = "[Consumbles]";
+const string StorageAmmoKeyword              = "[Ammo]";
+const string StorageFoodKeyword              = "[Food]";
+const string StoragePrototechKeyword         = "[Prototech]";
+const string StorageScrapKeyword             = "[Scrap]";
+// Display keywords
+const string StorageMaterialsDisplayKeyword  = "[MatDisplay]";
+const string StorageComponentsDisplayKeyword = "[CompDisplay]";
+const string StorageConsumblesDisplayKeyword = "[ConsumblesDisplay]";
+const string StorageAmmoDisplayKeyword       = "[AmmoDisplay]";
+const int StorageMaterialsDisplayPanel  = 0;
+const int StorageComponentsDisplayPanel = 0;
+const int StorageConsumblesDisplayPanel = 0;
+const int StorageAmmoDisplayPanel       = 0;
+// Battery
+const string BatteryDisplayKeyword = "[BatteryDisplay]";
+const int BatteryDisplayPanel      = 0;
+// Probe
+const string ProbeCameraKeyword  = "[ProbeCamera]";
+const string ProbeDisplayKeyword = "[ProbeTarget]";
+// Solar
+const string SolarPointerRCKeyword     = "[AxisAligner]";
+const string SolarAzimuthRotorKeyword  = "[SolarWing]";
+const string SolarDisplayKeyword       = "[SolarDisplay]";
+const string SolarCTCKeyword           = "[SolarCTC]";
+const string SolarCameraKeyword        = "[SolarTracker]";
+const int SolarDisplayPanel            = 0;
+// Assembler type identifiers (from DefinitionDisplayNameText)
+const string AsmTypeSurvivalKit  = "Survival Kit";
+const string AsmTypeFoodProc     = "Food Processor";
+const string AsmTypePrototech    = "Prototech Assembler";
+////////////////////////////////////// CONSTANTS ///////////////////////////////////
+
+////////////////////////////////////// STATE ///////////////////////////////////
 int CurrentBlockCount, PastBlockCount;
-
-int LightRadius;
-string ExclusionKeyword;
-
-string StorageMaterialsKeyword;
-string StorageComponentsKeyword;
-string StorageConsumblesKeyword;
-string StorageAmmoKeyword;
-string StorageMaterialsDisplayKeyword;
-string StorageComponentsDisplayKeyword;
-string StorageConsumblesDisplayKeyword;
-string StorageAmmoDisplayKeyword;
-int StorageMaterialsDisplayPanel;
-int StorageComponentsDisplayPanel;
-int StorageConsumblesDisplayPanel;
-int StorageAmmoDisplayPanel;
-
-string BatteryDisplayKeyword;
-int BatteryDisplayPanel;
-
-string ProbeCameraKeyword;
-string ProbeDisplayKeyword;
-
-string SolarPointerRCKeyword;
-string solarAzimuthRotorKeyword;
-string SolarDisplayKeyword;
-string SolarCTCKeyword;
-string SolarCameraKeyword;
-int SolarDisplaypanel;
 int SolarRedirects;
 double Proximity, SolarDirectionSwitch;
 double SolarPowerOutput, SolarPowerOutputPrev;
-
-string ClocksKeyword;
-string NanoBARSKeyword;
-string MasterKeyword;
 bool nanoUseIgnoreColor;
 Vector3 nanoIgnoreHSV;
-// SE ColorMaskHSV stores offsets from the base grey; BaRS stores absolute HSV (H:0-360, S:0-100, V:0-100)
-const float SE_COLOR_BASE_S = 0.80f;
-const float SE_COLOR_BASE_V = 0.45f;
-
 ////////////////////////////////////// LISTS ///////////////////////////////////
 Dictionary<string, string> assemblerBlueprintMap = new Dictionary<string, string>();
 
@@ -54,34 +66,41 @@ List<IMyInteriorLight> InteriorLightBlocks = new List<IMyInteriorLight>();
 List<IMyLightingBlock> interiorLightsCast = new List<IMyLightingBlock>();
 List<IMyLightingBlock> reflectorLightsCast = new List<IMyLightingBlock>();
 
-List<IMyAssembler> assemblers = new List<IMyAssembler>();
+List<IMyAssembler> commonAssemblers   = new List<IMyAssembler>(); // Basic + Industrial Assembler
+List<IMyAssembler> prototechAssemblers = new List<IMyAssembler>(); // Prototech Assembler
+List<IMyAssembler> foodProcessors     = new List<IMyAssembler>(); // Food Processor
 List<IMyRefinery> refinerys = new List<IMyRefinery>();
 List<IMyTerminalBlock> nanoBARS = new List<IMyTerminalBlock>();
 
 List<IMyMedicalRoom> RefillPoints = new List<IMyMedicalRoom>();
-List<IMyTextSurfaceProvider> Clocks = new List<IMyTextSurfaceProvider>(); // [Clocks]
+List<IMyTextSurfaceProvider> Clocks = new List<IMyTextSurfaceProvider>();
 
 List<IMySolarPanel> solarPanels = new List<IMySolarPanel>();
 List<IMyBatteryBlock> batteries = new List<IMyBatteryBlock>();
 List<IMyFunctionalBlock> algaeFarms = new List<IMyFunctionalBlock>();
 
-List<IMyTextSurfaceProvider> ProbeDisplay = new List<IMyTextSurfaceProvider>(); // [ScopeTarget]
+List<IMyTextSurfaceProvider> ProbeDisplay = new List<IMyTextSurfaceProvider>();
 ////////////////////////////////////// LISTS ///////////////////////////////////
 Color interiorLightColor;
 Color reflectorLightColor;
 Color foregroundColor;
 Color backgroundColor;
-const string font = "Monospace";
 ////////////////////////////////////// CACHED BLOCKS ///////////////////////////////////
 IMyTerminalBlock invMatBlock;
 IMyTerminalBlock invCompBlock;
 IMyTerminalBlock invConsumblesBlock;
 IMyTerminalBlock invAmmoBlock;
+IMyTerminalBlock invFoodBlock;
+IMyTerminalBlock invPrototechBlock;
+IMyTerminalBlock invScrapBlock;
 
 IMyInventory MaterialsInventory;
 IMyInventory ComponentsInventory;
 IMyInventory ConsumblesInventory;
 IMyInventory AmmoInventory;
+IMyInventory FoodInventory;
+IMyInventory PrototechInventory;
+IMyInventory ScrapInventory;
 
 IMyMotorStator solarAzimuthRotor;
 IMyRemoteControl solarController;
@@ -100,7 +119,6 @@ IMyCameraBlock ProbeCamera;
 System.Text.StringBuilder _sb = new System.Text.StringBuilder();
 ////////////////////////////////////// CACHED BLOCKS ///////////////////////////////////
 int Ticker;
-const int TickerLimit = 12;
 double[] tickTimes = new double[TickerLimit];
 double[] tickMaxTimes = new double[TickerLimit];
 double[] tickInstructions = new double[TickerLimit];
@@ -108,54 +126,18 @@ DateTime tickStart;
 public Program()
 {
 	CurrentBlockCount = PastBlockCount = 0;
-	Runtime.UpdateFrequency = UpdateFrequency.Update10; //| UpdateFrequency.Update10 | UpdateFrequency.Update1
+	Runtime.UpdateFrequency = UpdateFrequency.Update10;
 	Ticker = 0;
 	// Light -----------------------------------------------------------------------
-	LightRadius = 10;
-	ExclusionKeyword = "[TechLight]";
 	interiorLightColor = new Color(204, 255, 140, 255);
 	reflectorLightColor = new Color(255, 255, 255, 255);
 	foregroundColor = new Color(100, 255, 100, 255);
 	backgroundColor = new Color(0, 0, 0, 255);
-	// Storage ---------------------------------------------------------------------
-	StorageMaterialsKeyword = "[Materials]";
-	StorageMaterialsDisplayKeyword = "[MatDisplay]";
-	StorageMaterialsDisplayPanel = 0;
-	
-	StorageComponentsKeyword = "[Components]";
-	StorageComponentsDisplayKeyword = "[CompDisplay]";
-	StorageComponentsDisplayPanel = 0;
-
-	StorageConsumblesKeyword = "[Consumbles]";
-	StorageConsumblesDisplayKeyword = "[ConsumblesDisplay]";
-	StorageConsumblesDisplayPanel = 0;
-
-	StorageAmmoKeyword = "[Ammo]";
-	StorageAmmoDisplayKeyword = "[AmmoDisplay]";
-	StorageAmmoDisplayPanel = 0;
 	// Solar -----------------------------------------------------------------------
-	SolarPointerRCKeyword = "[AxisAligner]";
-	solarAzimuthRotorKeyword = "[SolarWing]";
-	SolarDisplayKeyword = "[SolarDisplay]";
-	SolarCTCKeyword = "[SolarCTC]";
-	SolarCameraKeyword = "[SolarTracker]";
-
-	SolarDisplaypanel = 0;
 	SolarDirectionSwitch = 1;
 	SolarRedirects = 0;
 	Proximity = 0.001;
-
-	// Battery ----------------------------------------------------------------
-	BatteryDisplayKeyword = "[BatteryDisplay]";
-	BatteryDisplayPanel = 0;
-	// Probe -------------------------------------------------------------------
-	ProbeCameraKeyword = "[ProbeCamera]";
-	ProbeDisplayKeyword = "[ProbeTarget]";
-	// Other -------------------------------------------------------------------
-	ClocksKeyword = "[Clock]";
-	NanoBARSKeyword = "BuildAndRepairSystem";
-	MasterKeyword = "[Master]";
-
+	// Init maps -------------------------------------------------------------------
 	BlueprintMapFill();
 }
 //public void Save(){}
@@ -178,9 +160,38 @@ public void Main(string argument, UpdateType updateSource)
 		MoveGridContentsToInventory("Miner", MaterialsInventory);
 		return;
 	}
-	if (StringContains(argument, "getasmqueue"))
+	if (StringContains(argument, "getasmq"))
 	{
-		Me.CustomData = "getasmqueue";
+		string[] parts = argument.Trim().Split(' ');
+		if (parts.Length >= 2)
+		{
+			string containerKw = parts[1].Trim();
+			IMyTerminalBlock container = BlockNamed(containerKw);
+			if (container != null)
+			{
+				// Find first non-cooperative assembler matching that container type
+				List<IMyAssembler> list = null;
+				if (containerKw == StorageComponentsKeyword) list = commonAssemblers;
+				else if (containerKw == StoragePrototechKeyword) list = prototechAssemblers;
+				else if (containerKw == StorageFoodKeyword) list = foodProcessors;
+				if (list != null && list.Count > 0)
+				{
+					for (int i = 0; i < list.Count; i++)
+					{
+						if (!list[i].CooperativeMode) { GetAssemblerQueue(list[i]); break; }
+					}
+				}
+			}
+		}
+		return;
+	}
+	if (StringContains(argument, "getinv"))
+	{
+		string[] parts = argument.Trim().Split(' ');
+		if (parts.Length >= 2)
+		{
+			GetInventoryContents(BlockNamed(parts[1].Trim()));
+		}
 		return;
 	}
 	if (StringContains(argument, "formatdisplay"))
@@ -207,10 +218,10 @@ public void Main(string argument, UpdateType updateSource)
 			
 		} break;
 		case 1: CleanAssemblers(); SortComponents(); break;
-		case 2: ProcessAssemblerQueue(invCompBlock); break;
-		case 3: ProcessAssemblerQueue(invAmmoBlock); break;
-		case 4:	DisplayStoredComponents(); break;
-		case 5: DisplayStoredConsumbles(); break;
+		case 2: ProcessAssemblerQueue(commonAssemblers, invCompBlock); break;
+		case 3: ProcessAssemblerQueue(commonAssemblers, invAmmoBlock); break;
+		case 4:	ProcessAssemblerQueue(prototechAssemblers, invPrototechBlock); break;
+		case 5: DisplayStoredComponents(); DisplayStoredConsumbles(); break;
 		case 6: DisplayStoredAmmo(); break;
 		case 7: CleanNanoBARSs(); NanoBARSGrindControl(); break;
 		case 8: CleanRefinerys(); /*CleanAlgaeFarms();*/ break;
@@ -234,17 +245,29 @@ void EchoStats()
 	for (int i = 0; i < TickerLimit; i++)
 		_sb.AppendLine(string.Format("[{0,2}]: {1,4:F0} ({2,4:F0}) | {3,5}", i, tickTimes[i], tickMaxTimes[i], tickInstructions[i]));
 	_sb.AppendLine(string.Format("Tick: {0}", Ticker));
-
-	string text = _sb.ToString();
-	Echo(text);
 	WriteToDisplay(Me.GetSurface(0),true);
 }
 // ------------------------------------------------------------------------------- Cache
 void RefreshBlockCache()
 {
 	GridTerminalSystem.GetBlocksOfType<IMyRefinery>(refinerys);
-	GridTerminalSystem.GetBlocksOfType<IMyAssembler>(assemblers);
-	SetAssemblerCooperativeMode();
+
+	// Assemblers: sort into 3 separate lists
+	var allAssemblers = new List<IMyAssembler>();
+	GridTerminalSystem.GetBlocksOfType<IMyAssembler>(allAssemblers);
+	commonAssemblers.Clear();
+	prototechAssemblers.Clear();
+	foodProcessors.Clear();
+	for (int i = 0; i < allAssemblers.Count; i++)
+	{
+		string name = allAssemblers[i].DefinitionDisplayNameText;
+		if (name.Contains(AsmTypeSurvivalKit)) continue;
+		if (name.Contains(AsmTypeFoodProc)) foodProcessors.Add(allAssemblers[i]);
+		else if (name.Contains(AsmTypePrototech)) prototechAssemblers.Add(allAssemblers[i]);
+		else commonAssemblers.Add(allAssemblers[i]);
+	}
+	SetAssemblerCooperativeMode(commonAssemblers);
+	SetAssemblerCooperativeMode(prototechAssemblers);
 
 	GridTerminalSystem.GetBlocksOfType<IMySolarPanel>(solarPanels);
 
@@ -269,13 +292,19 @@ void RefreshBlockCache()
 	invCompBlock       = BlockNamed(StorageComponentsKeyword);
 	invConsumblesBlock = BlockNamed(StorageConsumblesKeyword);
 	invAmmoBlock       = BlockNamed(StorageAmmoKeyword);
+	invFoodBlock       = BlockNamed(StorageFoodKeyword);
+	invPrototechBlock  = BlockNamed(StoragePrototechKeyword);
+	invScrapBlock      = BlockNamed(StorageScrapKeyword);
 
-	MaterialsInventory 	= (invMatBlock != null) ? invMatBlock.GetInventory(0) : null;
+	MaterialsInventory  = (invMatBlock != null) ? invMatBlock.GetInventory(0) : null;
 	ComponentsInventory = (invCompBlock != null) ? invCompBlock.GetInventory(0) : null;
 	ConsumblesInventory = (invConsumblesBlock != null) ? invConsumblesBlock.GetInventory(0) : null;
-	AmmoInventory 		= (invAmmoBlock != null) ? invAmmoBlock.GetInventory(0) : null;
+	AmmoInventory       = (invAmmoBlock != null) ? invAmmoBlock.GetInventory(0) : null;
+	FoodInventory       = (invFoodBlock != null) ? invFoodBlock.GetInventory(0) : null;
+	PrototechInventory  = (invPrototechBlock != null) ? invPrototechBlock.GetInventory(0) : null;
+	ScrapInventory      = (invScrapBlock != null) ? invScrapBlock.GetInventory(0) : null;
 
-	solarAzimuthRotor  = BlockNamed(solarAzimuthRotorKeyword) as IMyMotorStator;
+	solarAzimuthRotor  = BlockNamed(SolarAzimuthRotorKeyword) as IMyMotorStator;
 	solarController    = BlockNamed(SolarPointerRCKeyword) as IMyRemoteControl;
 	SolarConfigureAxisAligner();
 	solarCTC           = BlockNamed(SolarCTCKeyword) as IMyTurretControlBlock;
@@ -285,7 +314,7 @@ void RefreshBlockCache()
 	ProbeDisplay.Clear();
 	foreach (var display in BlocksNamed(ProbeDisplayKeyword)) ProbeDisplay.Add(display as IMyTextSurfaceProvider);
 
-	solarDisplay       = GetTextSurface(BlockNamed(SolarDisplayKeyword) as IMyTextSurfaceProvider, SolarDisplaypanel);
+	solarDisplay       = GetTextSurface(BlockNamed(SolarDisplayKeyword) as IMyTextSurfaceProvider, SolarDisplayPanel);
 	materialsDisplay   = GetTextSurface(BlockNamed(StorageMaterialsDisplayKeyword) as IMyTextSurfaceProvider, StorageMaterialsDisplayPanel);
 	componentsDisplay  = GetTextSurface(BlockNamed(StorageComponentsDisplayKeyword) as IMyTextSurfaceProvider, StorageComponentsDisplayPanel);
 	ConsumblesDisplay  = GetTextSurface(BlockNamed(StorageConsumblesDisplayKeyword) as IMyTextSurfaceProvider, StorageConsumblesDisplayPanel);
@@ -392,37 +421,51 @@ void CleanProductionInventories()
 }
 void CleanAssemblers()
 {
-	if (ComponentsInventory == null || MaterialsInventory == null) return;
-	for (int i = 0; i < assemblers.Count; i++)
+	// Common assemblers: Materials <-> Components
+	if (ComponentsInventory != null && MaterialsInventory != null)
 	{
-		CleanAssembler(assemblers[i] as IMyAssembler);
+		for (int i = 0; i < commonAssemblers.Count; i++)
+			CleanAssembler(commonAssemblers[i], MaterialsInventory, ComponentsInventory);
+	}
+	// Prototech assemblers: Materials <-> Prototech container
+	if (PrototechInventory != null && MaterialsInventory != null)
+	{
+		for (int i = 0; i < prototechAssemblers.Count; i++)
+			CleanAssembler(prototechAssemblers[i], MaterialsInventory, PrototechInventory);
+	}
+	// Food processors: Materials <-> Food container
+	if (FoodInventory != null)
+	{
+		for (int i = 0; i < foodProcessors.Count; i++)
+			CleanAssembler(foodProcessors[i], FoodInventory, FoodInventory);
 	}
 }
-void CleanAssembler(IMyAssembler assembler)
+void CleanAssembler(IMyAssembler assembler, IMyInventory sourceStorage, IMyInventory resultStorage)
 {
 	if (assembler == null) return;
-	IMyInventory source, result, sourceStorage, resultStorage;
+	IMyInventory source, result;
+	IMyInventory srcDest, resDest;
 	if (assembler.Mode == MyAssemblerMode.Assembly)
 	{
 		source = assembler.InputInventory;
 		result = assembler.OutputInventory;
-		sourceStorage = MaterialsInventory;
-		resultStorage = ComponentsInventory;
+		srcDest = sourceStorage;
+		resDest = resultStorage;
 	}
 	else
 	{
 		source = assembler.OutputInventory;
 		result = assembler.InputInventory;
-		sourceStorage = ComponentsInventory;
-		resultStorage = MaterialsInventory;
+		srcDest = resultStorage;
+		resDest = sourceStorage;
 	}
 
-	if (source == null || result == null || sourceStorage == null || resultStorage == null) return;
+	if (source == null || result == null || srcDest == null || resDest == null) return;
 
-	if (assembler.IsProducing) MoveOneItem(result, resultStorage);
-	else MoveAllItems(result, resultStorage);
+	if (assembler.IsProducing) MoveOneItem(result, resDest);
+	else MoveAllItems(result, resDest);
 
-	if (!assembler.IsProducing && assembler.IsQueueEmpty) MoveAllItems(source, sourceStorage);
+	if (!assembler.IsProducing && assembler.IsQueueEmpty) MoveAllItems(source, srcDest);
 }
 void CleanRefinerys()
 {
@@ -453,64 +496,98 @@ void CleanAlgaeFarm(IMyFunctionalBlock algaeFarm)
 	if (algaeFarm == null || ConsumblesInventory == null) return;
 	MoveOneItem(algaeFarm.GetInventory(0), ConsumblesInventory);
 }
-void SetAssemblerCooperativeMode()
+void SetAssemblerCooperativeMode(List<IMyAssembler> list)
 {
 	IMyAssembler master = null;
 	int masterCount = 0;
-	for (int i = 0; i < assemblers.Count; i++)
+	for (int i = 0; i < list.Count; i++)
 	{
-		if (StringContains(assemblers[i].CustomName, MasterKeyword))
+		if (StringContains(list[i].CustomName, MasterKeyword))
 		{
-			master = assemblers[i];
+			master = list[i];
 			masterCount++;
 		}
 	}
 	if (masterCount != 1) return;
 
 	master.CooperativeMode = false;
-	for (int i = 0; i < assemblers.Count; i++)
+	for (int i = 0; i < list.Count; i++)
 	{
-		if (ReferenceEquals(assemblers[i], master)) continue;
-		assemblers[i].CooperativeMode = true;
+		if (ReferenceEquals(list[i], master)) continue;
+		list[i].CooperativeMode = true;
 	}
 }
 void SortComponents()
 {
+	//if (ComponentsInventory != null) SortInventory(ComponentsInventory);
+	if (ScrapInventory != null) SortInventory(ScrapInventory);
+}
+void SortInventory(IMyInventory source)
+{
 	items.Clear();
-	ComponentsInventory.GetItems(items);
+	source.GetItems(items);
 
 	for (int i = items.Count - 1; i >= 0; i--)
 	{
-		switch (items[i].Type.TypeId.Split('_')[1])
+		string typeId = items[i].Type.TypeId.Split('_')[1];
+		string subtypeId = items[i].Type.SubtypeId;
+		switch (typeId)
 		{
 			case "Ingot":
 			case "Ore":
-			  MoveOneItem(ComponentsInventory, MaterialsInventory, i);	break;
+				MoveOneItem(source, MaterialsInventory, i); break;
 			case "SeedItem":
+				MoveOneItem(source, FoodInventory, i); break;
 			case "ConsumableItem":
-			  MoveOneItem(ComponentsInventory, ConsumblesInventory, i);	break;
+				{
+					if (
+						  subtypeId.Contains("Meal") || 
+							subtypeId.Contains("Meat") || 
+							subtypeId == "ClangCola" || 
+							subtypeId == "CosmicCoffee" ||
+							subtypeId == "Mushrooms" || 
+							subtypeId == "Vegetables" || 
+							subtypeId == "Fruits")
+						MoveOneItem(source, FoodInventory ?? ConsumblesInventory, i);
+					else
+						MoveOneItem(source, ConsumblesInventory, i);
+					break;
+						
+				}
+			case "PhysicalObject":
+			  if (subtypeId == "Algae" || subtypeId == "Grain") MoveOneItem(source, FoodInventory ?? ConsumblesInventory, i); break;
 			case "PhysicalGunObject":
 			case "AmmoMagazine":
-			  MoveOneItem(ComponentsInventory, AmmoInventory, i);			  break;
+				MoveOneItem(source, AmmoInventory, i); break;
+			case "Component":
+				if (subtypeId.Contains("Prototech"))
+					MoveOneItem(source, PrototechInventory ?? ComponentsInventory, i);
+				else if (source != ComponentsInventory)
+					MoveOneItem(source, ComponentsInventory, i);
+				break;
+			default:
+				if (source != ComponentsInventory)
+					MoveOneItem(source, ComponentsInventory, i);
+				break;
 		}
 	}
 }
 // ------------------------------------------------------------------------------- NanoBARS
 void CleanNanoBARSs()
 {
-	if (nanoBARS != null && ComponentsInventory != null)
+	IMyInventory dest = ScrapInventory ?? ComponentsInventory;
+	if (nanoBARS != null && dest != null)
 	{
 		for (int i = 0; i < nanoBARS.Count; i++)
 		{
-			CleanNanoBARS(nanoBARS[i]);
+			CleanNanoBARS(nanoBARS[i], dest);
 		}
 	}
 }
-void CleanNanoBARS(IMyTerminalBlock inventoryBlock)
+void CleanNanoBARS(IMyTerminalBlock inventoryBlock, IMyInventory dest)
 {
 	if (inventoryBlock == null) return;
-	else MoveAllItems(inventoryBlock.GetInventory(0), ComponentsInventory);
-
+	MoveAllItems(inventoryBlock.GetInventory(0), dest);
 }
 void SyncNanoBARSSettings()
 {
@@ -624,7 +701,6 @@ void NanoBARSGrindControl()
 		}
 		bar.SetValue<IMySlimBlock>("BuildAndRepair.CurrentPickedGrindTarget", picked);
 	}
-	Me.CustomData = _sb.ToString();
 }
 bool HSVMatches(Vector3 a, Vector3 b, float tolerance = 0.05f)
 {
@@ -681,55 +757,40 @@ void AquireTarget(int distance)
 	}
 }
 // ------------------------------------------------------------------------------- Storage Queue
-void ProcessAssemblerQueue(IMyTerminalBlock storageBlock)
+void ProcessAssemblerQueue(List<IMyAssembler> list, IMyTerminalBlock storageBlock)
 {
-	bool exit = false;
-	IMyAssembler target = null;
-	string customData;
-
-	if (storageBlock == null) return;
+	if (storageBlock == null || list == null || list.Count == 0) return;
 	IMyInventory inventory = storageBlock.GetInventory(0);
 	if (inventory == null) return;
 	items.Clear();
 	inventory.GetItems(items);
-	customData = storageBlock.CustomData;
+	string customData = storageBlock.CustomData;
 	// --- Fill mode: CustomData is empty, snapshot current inventory as baseline ---
 	if (string.IsNullOrEmpty(customData.Trim()))
 	{
-	_sb.Clear();
-	for (int i = 0; i < items.Count; i++)
-		_sb.AppendLine(string.Format("{0}: {1}", items[i].Type.SubtypeId, (double)items[i].Amount));
-	storageBlock.CustomData = _sb.ToString();
-	return;
+		_sb.Clear();
+		for (int i = 0; i < items.Count; i++)
+			_sb.AppendLine(string.Format("{0}: {1}", items[i].Type.SubtypeId, (double)items[i].Amount));
+		storageBlock.CustomData = _sb.ToString();
+		return;
 	}
 
-	if (assemblers.Count == 0) return;
-	// --- Assembler check: exit if any assembler is currently producing ---
-	for (int i = 0; i < assemblers.Count; i++)
+	// --- Assembler check: find master, exit if any in this list is busy ---
+	bool exit = false;
+	IMyAssembler target = null;
+	for (int i = 0; i < list.Count; i++)
 	{
-	if(assemblers[i].DefinitionDisplayNameText.Contains("Survival Kit")) continue;
-	if(assemblers[i].DefinitionDisplayNameText.Contains("Food Processor")) continue;
-	if(assemblers[i].DefinitionDisplayNameText.Contains("Prototach Assembler")) continue;
-
-	if (target == null && assemblers[i].Mode == MyAssemblerMode.Assembly && !assemblers[i].CooperativeMode) 
-	{
-		target = assemblers[i];
-		if (Me.CustomData == "getasmqueue")
+		if (target == null && list[i].Mode == MyAssemblerMode.Assembly && !list[i].CooperativeMode)
 		{
-			Me.CustomData = "";
-			List<MyProductionItem> items = new List<MyProductionItem>();
-			target.GetQueue(items);
-			foreach (var item in items)
-			{
-				Me.CustomData += string.Format("{1}: {0}\n", item.Amount, item.BlueprintId.ToString().Split('/')[1]);
-			}
+			target = list[i];
+			exit = target.IsProducing || !target.IsQueueEmpty;
 		}
-		exit = target.IsProducing || !target.IsQueueEmpty;
-	}
-	else if (!exit && assemblers[i].CooperativeMode && (assemblers[i].IsProducing || !assemblers[i].IsQueueEmpty))exit = true;
+		else if (!exit && list[i].CooperativeMode && (list[i].IsProducing || !list[i].IsQueueEmpty))
+			exit = true;
 	}
 	if (target == null || exit) return;
-	// --- Queue mode: parse CustomData as "TypeId/SubtypeId: amount" pairs ---
+
+	// --- Queue mode: parse CustomData as "SubtypeId: amount" pairs ---
 	var requested = new Dictionary<string, double>();
 	string[] lines = customData.Split('\n');
 	for (int i = 0; i < lines.Length; i++)
@@ -744,10 +805,11 @@ void ProcessAssemblerQueue(IMyTerminalBlock storageBlock)
 		requested[key] = amount;
 	}
 
-	// Build present-amount lookup from current inventory (keyed by item SubtypeId)
+	// Build present-amount lookup from current inventory
 	var present = new Dictionary<string, double>();
 	for (int i = 0; i < items.Count; i++)
 		present[items[i].Type.SubtypeId] = (double)items[i].Amount;
+
 	// --- Queue deficit amounts (requested - present) ---
 	foreach (var kvp in requested)
 	{
@@ -756,7 +818,6 @@ void ProcessAssemblerQueue(IMyTerminalBlock storageBlock)
 		double diff = kvp.Value - have;
 		if (diff <= 0) continue;
 
-		// Resolve blueprint name: use map for ammo, fall back to SubtypeId for components
 		string blueprintSubtype;
 		if (!assemblerBlueprintMap.TryGetValue(kvp.Key, out blueprintSubtype))
 			blueprintSubtype = kvp.Key;
@@ -1029,6 +1090,32 @@ void SetName(IMyTerminalBlock block, string name)
 	{
 		block.CustomName = name;
 	}
+}
+void GetAssemblerQueue(IMyAssembler target)
+{
+	if (target == null) return;
+	_sb.Clear();
+	List<MyProductionItem> queueItems = new List<MyProductionItem>();
+	target.GetQueue(queueItems);
+	foreach (var item in queueItems)
+	{
+		_sb.AppendLine(string.Format("{1}: {0}", item.Amount, item.BlueprintId.ToString().Split('/')[1]));
+	}
+	Me.CustomData = _sb.ToString();
+}
+void GetInventoryContents(IMyTerminalBlock block)
+{
+	if (block == null) return;
+	_sb.Clear();
+	for (int j = 0; j < block.InventoryCount; j++)
+	{
+		IMyInventory inv = block.GetInventory(j);
+		items.Clear();
+		inv.GetItems(items);
+		for (int k = 0; k < items.Count; k++)
+			_sb.AppendLine(string.Format("{0}/{1}: {2}", items[k].Type.TypeId, items[k].Type.SubtypeId, (double)items[k].Amount));
+	}
+	Me.CustomData = _sb.ToString();
 }
 bool BlockCountChanged()
 {
