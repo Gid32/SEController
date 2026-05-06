@@ -519,7 +519,7 @@ void SetAssemblerCooperativeMode(List<IMyAssembler> list)
 }
 void SortComponents()
 {
-	//if (ComponentsInventory != null) SortInventory(ComponentsInventory);
+	if (ComponentsInventory != null) SortInventory(ComponentsInventory);
 	if (ScrapInventory != null) SortInventory(ScrapInventory);
 }
 void SortInventory(IMyInventory source)
