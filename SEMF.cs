@@ -412,7 +412,7 @@ void DisplayStored(IMyInventory inventory, IMyTextSurface display, string title,
 		WriteToDisplay(display);
 	}
 }
-// ------------------------------------------------------------------------------- Production
+// ------------------------------------------------------------------------------- Production cleanup
 void CleanProductionInventories()
 {
 	CleanAssemblers();
@@ -421,51 +421,27 @@ void CleanProductionInventories()
 }
 void CleanAssemblers()
 {
-	// Common assemblers: Materials <-> Components
-	if (ComponentsInventory != null && MaterialsInventory != null)
-	{
-		for (int i = 0; i < commonAssemblers.Count; i++)
-			CleanAssembler(commonAssemblers[i], MaterialsInventory, ComponentsInventory);
-	}
-	// Prototech assemblers: Materials <-> Prototech container
-	if (PrototechInventory != null && MaterialsInventory != null)
-	{
-		for (int i = 0; i < prototechAssemblers.Count; i++)
-			CleanAssembler(prototechAssemblers[i], MaterialsInventory, PrototechInventory);
-	}
-	// Food processors: Materials <-> Food container
-	if (FoodInventory != null)
-	{
-		for (int i = 0; i < foodProcessors.Count; i++)
-			CleanAssembler(foodProcessors[i], FoodInventory, FoodInventory);
-	}
+	for (int i = 0; i < commonAssemblers.Count; i++)
+		CleanAssembler(commonAssemblers[i]);
+	for (int i = 0; i < prototechAssemblers.Count; i++)
+		CleanAssembler(prototechAssemblers[i]);
+	for (int i = 0; i < foodProcessors.Count; i++)
+		CleanAssembler(foodProcessors[i]);
 }
-void CleanAssembler(IMyAssembler assembler, IMyInventory sourceStorage, IMyInventory resultStorage)
+void CleanAssembler(IMyAssembler assembler)
 {
 	if (assembler == null) return;
-	IMyInventory source, result;
-	IMyInventory srcDest, resDest;
-	if (assembler.Mode == MyAssemblerMode.Assembly)
-	{
-		source = assembler.InputInventory;
-		result = assembler.OutputInventory;
-		srcDest = sourceStorage;
-		resDest = resultStorage;
-	}
-	else
-	{
-		source = assembler.OutputInventory;
-		result = assembler.InputInventory;
-		srcDest = resultStorage;
-		resDest = sourceStorage;
-	}
+	IMyInventory input, output;
+	// input/output inventories are static for assembler, and does not depend on production state
+	if (assembler.Mode == MyAssemblerMode.Assembly) {input = assembler.InputInventory; output = assembler.OutputInventory;	}
+	else { input = assembler.OutputInventory; output = assembler.InputInventory; }
 
-	if (source == null || result == null || srcDest == null || resDest == null) return;
+	if (input == null || output == null) return;
 
-	if (assembler.IsProducing) MoveOneItem(result, resDest);
-	else MoveAllItems(result, resDest);
+	if (assembler.IsProducing) MoveOneItemRouted(output);
+	else MoveAllItemsRouted(output);
 
-	if (!assembler.IsProducing && assembler.IsQueueEmpty) MoveAllItems(source, srcDest);
+	if (!assembler.IsProducing && assembler.IsQueueEmpty) MoveAllItemsRouted(input);
 }
 void CleanRefinerys()
 {
@@ -493,8 +469,8 @@ void CleanAlgaeFarms()
 }
 void CleanAlgaeFarm(IMyFunctionalBlock algaeFarm)
 {
-	if (algaeFarm == null || ConsumblesInventory == null) return;
-	MoveOneItem(algaeFarm.GetInventory(0), ConsumblesInventory);
+	if (algaeFarm == null) return;
+	MoveOneItemRouted(algaeFarm.GetInventory(0));
 }
 void SetAssemblerCooperativeMode(List<IMyAssembler> list)
 {
@@ -519,75 +495,25 @@ void SetAssemblerCooperativeMode(List<IMyAssembler> list)
 }
 void SortComponents()
 {
-	if (ComponentsInventory != null) SortInventory(ComponentsInventory);
 	if (ScrapInventory != null) SortInventory(ScrapInventory);
 }
 void SortInventory(IMyInventory source)
 {
-	items.Clear();
-	source.GetItems(items);
-
-	for (int i = items.Count - 1; i >= 0; i--)
-	{
-		string typeId = items[i].Type.TypeId.Split('_')[1];
-		string subtypeId = items[i].Type.SubtypeId;
-		switch (typeId)
-		{
-			case "Ingot":
-			case "Ore":
-				MoveOneItem(source, MaterialsInventory, i); break;
-			case "SeedItem":
-				MoveOneItem(source, FoodInventory, i); break;
-			case "ConsumableItem":
-				{
-					if (
-						  subtypeId.Contains("Meal") || 
-							subtypeId.Contains("Meat") || 
-							subtypeId == "ClangCola" || 
-							subtypeId == "CosmicCoffee" ||
-							subtypeId == "Mushrooms" || 
-							subtypeId == "Vegetables" || 
-							subtypeId == "Fruits")
-						MoveOneItem(source, FoodInventory ?? ConsumblesInventory, i);
-					else
-						MoveOneItem(source, ConsumblesInventory, i);
-					break;
-						
-				}
-			case "PhysicalObject":
-			  if (subtypeId == "Algae" || subtypeId == "Grain") MoveOneItem(source, FoodInventory ?? ConsumblesInventory, i); break;
-			case "PhysicalGunObject":
-			case "AmmoMagazine":
-				MoveOneItem(source, AmmoInventory, i); break;
-			case "Component":
-				if (subtypeId.Contains("Prototech"))
-					MoveOneItem(source, PrototechInventory ?? ComponentsInventory, i);
-				else if (source != ComponentsInventory)
-					MoveOneItem(source, ComponentsInventory, i);
-				break;
-			default:
-				if (source != ComponentsInventory)
-					MoveOneItem(source, ComponentsInventory, i);
-				break;
-		}
-	}
+	MoveAllItemsRouted(source);
 }
 // ------------------------------------------------------------------------------- NanoBARS
 void CleanNanoBARSs()
 {
-	IMyInventory dest = ScrapInventory ?? ComponentsInventory;
-	if (nanoBARS != null && dest != null)
+	if (nanoBARS == null) return;
+	for (int i = 0; i < nanoBARS.Count; i++)
 	{
-		for (int i = 0; i < nanoBARS.Count; i++)
-		{
-			CleanNanoBARS(nanoBARS[i], dest);
-		}
+		CleanNanoBARS(nanoBARS[i]);
 	}
 }
-void CleanNanoBARS(IMyTerminalBlock inventoryBlock, IMyInventory dest)
+void CleanNanoBARS(IMyTerminalBlock inventoryBlock)
 {
 	if (inventoryBlock == null) return;
-	MoveAllItems(inventoryBlock.GetInventory(0), dest);
+	MoveAllItemsRouted(inventoryBlock.GetInventory(0));
 }
 void SyncNanoBARSSettings()
 {
@@ -701,12 +627,6 @@ void NanoBARSGrindControl()
 		}
 		bar.SetValue<IMySlimBlock>("BuildAndRepair.CurrentPickedGrindTarget", picked);
 	}
-}
-bool HSVMatches(Vector3 a, Vector3 b, float tolerance = 0.05f)
-{
-	return Math.Abs(a.X - b.X) <= tolerance &&
-	       Math.Abs(a.Y - b.Y) <= tolerance &&
-	       Math.Abs(a.Z - b.Z) <= tolerance;
 }
 // ------------------------------------------------------------------------------- Probe
 void AquireTarget(int distance)
@@ -986,6 +906,30 @@ void MoveAllItems(IMyInventory source, IMyInventory dest)
 		source.TransferItemTo(dest, 0, null, true, null);
 	}
 }
+void MoveOneItemRouted(IMyInventory source)
+{
+	if (source == null) return;
+	items.Clear();
+	source.GetItems(items);
+	if (items.Count > 0)
+	{
+		IMyInventory dest = RouteItem(items[0]);
+		if (dest != null && dest != source)
+			source.TransferItemTo(dest, 0, null, true, null);
+	}
+}
+void MoveAllItemsRouted(IMyInventory source)
+{
+	if (source == null) return;
+	items.Clear();
+	source.GetItems(items);
+	for (int i = items.Count - 1; i >= 0; i--)
+	{
+		IMyInventory dest = RouteItem(items[i]);
+		if (dest != null && dest != source)
+			source.TransferItemTo(dest, i, null, true, null);
+	}
+}
 void MoveGridContentsToInventory(string gridNameSelector, IMyInventory target)
 {
 	//MoveGridContentsToInventory("Miner", MaterialsInventory); 
@@ -1129,6 +1073,12 @@ bool StringContains(string source, string keyword)
 {
 	return source.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0;
 }
+bool HSVMatches(Vector3 a, Vector3 b, float tolerance = 0.05f)
+{
+	return Math.Abs(a.X - b.X) <= tolerance &&
+	       Math.Abs(a.Y - b.Y) <= tolerance &&
+	       Math.Abs(a.Z - b.Z) <= tolerance;
+}
 string CreateGPS(string name, Vector3D? pos)
 {
 	if (pos == null) return $"GPS:{name}:::::#FF00FF00:";
@@ -1152,6 +1102,51 @@ string FormatTypeId(MyInventoryItem item)
 double[] 	GetXYZ(IMyTerminalBlock block)
 {
 	return new double[] { block.GetPosition().GetDim(0), block.GetPosition().GetDim(1), block.GetPosition().GetDim(2) };
+}
+IMyInventory RouteItem(MyInventoryItem item)
+{
+	string typeId = item.Type.TypeId.Split('_')[1];
+	string subtypeId = item.Type.SubtypeId;
+	IMyInventory target = null;
+	switch (typeId)
+	{
+		case "Ingot":
+		case "Ore":
+			target = MaterialsInventory; break;
+		case "SeedItem":
+			target = FoodInventory; break;
+		case "ConsumableItem":
+			{
+				if (
+						subtypeId.Contains("Meal") || 
+						subtypeId.Contains("Meat") || 
+						subtypeId == "ClangCola" || 
+						subtypeId == "CosmicCoffee" ||
+						subtypeId == "Mushrooms" || 
+						subtypeId == "Vegetables" || 
+						subtypeId == "Fruits")
+					target = FoodInventory ?? ConsumblesInventory;
+				else
+					target = ConsumblesInventory;
+				break;
+					
+			}
+		case "PhysicalObject":
+			if (subtypeId == "Algae" || subtypeId == "Grain") target = FoodInventory ?? ConsumblesInventory; break;
+		case "PhysicalGunObject":
+		case "AmmoMagazine":
+			target = AmmoInventory; break;
+		case "Component":
+			if (subtypeId.Contains("Prototech"))
+				target = PrototechInventory ?? ComponentsInventory;
+			else
+				target = ComponentsInventory;
+			break;
+		default:
+			target = ComponentsInventory;
+			break;
+	}
+	return target;
 }
 MyDetectedEntityInfo GetCameraTarget(IMyCameraBlock camera, double distance = 5000)
 {
