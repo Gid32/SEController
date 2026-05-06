@@ -495,11 +495,7 @@ void SetAssemblerCooperativeMode(List<IMyAssembler> list)
 }
 void SortComponents()
 {
-	if (ScrapInventory != null) SortInventory(ScrapInventory);
-}
-void SortInventory(IMyInventory source)
-{
-	MoveAllItemsRouted(source);
+	if (ScrapInventory != null) MoveAllItemsRouted(ScrapInventory);
 }
 // ------------------------------------------------------------------------------- NanoBARS
 void CleanNanoBARSs()
