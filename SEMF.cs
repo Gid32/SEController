@@ -49,27 +49,25 @@ const string AsmTypePrototech    = "Prototech Assembler";
 ////////////////////////////////////// CONSTANTS ///////////////////////////////////
 
 ////////////////////////////////////// STATE ///////////////////////////////////
-int CurrentBlockCount, PastBlockCount;
-int SolarRedirects;
-double Proximity, SolarDirectionSwitch;
-double SolarPowerOutput, SolarPowerOutputPrev;
+int CurrentBlockCount, PastBlockCountm, SolarRedirects;
 bool nanoUseIgnoreColor;
+double Proximity, SolarDirectionSwitch, SolarPowerOutput, SolarPowerOutputPrev;
 Vector3 nanoIgnoreHSV;
 ////////////////////////////////////// LISTS ///////////////////////////////////
 Dictionary<string, string> assemblerBlueprintMap = new Dictionary<string, string>();
 
-List<IMyTerminalBlock> L = new List<IMyTerminalBlock>();
 List<MyInventoryItem> items = new List<MyInventoryItem>();
+List<IMyTerminalBlock> L = new List<IMyTerminalBlock>();
 
 List<IMyReflectorLight> ReflectorLightBlocks = new List<IMyReflectorLight>();
 List<IMyInteriorLight> InteriorLightBlocks = new List<IMyInteriorLight>();
 List<IMyLightingBlock> interiorLightsCast = new List<IMyLightingBlock>();
 List<IMyLightingBlock> reflectorLightsCast = new List<IMyLightingBlock>();
 
-List<IMyAssembler> commonAssemblers   = new List<IMyAssembler>(); // Basic + Industrial Assembler
-List<IMyAssembler> prototechAssemblers = new List<IMyAssembler>(); // Prototech Assembler
-List<IMyAssembler> foodProcessors     = new List<IMyAssembler>(); // Food Processor
 List<IMyRefinery> refinerys = new List<IMyRefinery>();
+List<IMyAssembler> foodProcessors = new List<IMyAssembler>(); // Food Processor
+List<IMyAssembler> commonAssemblers = new List<IMyAssembler>(); // Basic + Industrial Assembler
+List<IMyAssembler> prototechAssemblers = new List<IMyAssembler>(); // Prototech Assembler
 List<IMyTerminalBlock> nanoBARS = new List<IMyTerminalBlock>();
 
 List<IMyMedicalRoom> RefillPoints = new List<IMyMedicalRoom>();
