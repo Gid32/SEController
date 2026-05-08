@@ -25,10 +25,14 @@ const string StorageMaterialsDisplayKeyword  = "[MatDisplay]";
 const string StorageComponentsDisplayKeyword = "[CompDisplay]";
 const string StorageConsumblesDisplayKeyword = "[ConsumblesDisplay]";
 const string StorageAmmoDisplayKeyword       = "[AmmoDisplay]";
+const string StorageFoodDisplayKeyword       = "[FoodDisplay]";
+const string StoragePrototechDisplayKeyword  = "[PrototechDisplay]";
 const int StorageMaterialsDisplayPanel  = 0;
 const int StorageComponentsDisplayPanel = 0;
 const int StorageConsumblesDisplayPanel = 0;
 const int StorageAmmoDisplayPanel       = 0;
+const int StorageFoodDisplayPanel       = 0;
+const int StoragePrototechDisplayPanel  = 0;
 // Battery
 const string BatteryDisplayKeyword = "[BatteryDisplay]";
 const int BatteryDisplayPanel      = 0;
@@ -49,7 +53,7 @@ const string AsmTypePrototech    = "Prototech Assembler";
 ////////////////////////////////////// CONSTANTS ///////////////////////////////////
 
 ////////////////////////////////////// STATE ///////////////////////////////////
-int CurrentBlockCount, PastBlockCountm, SolarRedirects;
+int CurrentBlockCount, PastBlockCount, SolarRedirects;
 bool nanoUseIgnoreColor;
 double Proximity, SolarDirectionSwitch, SolarPowerOutput, SolarPowerOutputPrev;
 Vector3 nanoIgnoreHSV;
@@ -111,6 +115,8 @@ IMyTextSurface componentsDisplay;
 IMyTextSurface ConsumblesDisplay;
 IMyTextSurface ammoDisplay;
 IMyTextSurface batteryDisplay;
+IMyTextSurface foodDisplay;
+IMyTextSurface prototechDisplay;
 
 IMyCameraBlock ProbeCamera;
 
@@ -210,8 +216,6 @@ public void Main(string argument, UpdateType updateSource)
 	{
 		case 0: if (BlockCountChanged()) {
 			RefreshBlockCache(); 
-			InteriorLightAdjust();
-			ReflectorLightAdjust();
 			DisplayClocks();
 			
 		} break;
@@ -219,8 +223,8 @@ public void Main(string argument, UpdateType updateSource)
 		case 2: ProcessAssemblerQueue(commonAssemblers, invCompBlock); break;
 		case 3: ProcessAssemblerQueue(commonAssemblers, invAmmoBlock); break;
 		case 4:	ProcessAssemblerQueue(prototechAssemblers, invPrototechBlock); break;
-		case 5: DisplayStoredComponents(); DisplayStoredConsumbles(); break;
-		case 6: DisplayStoredAmmo(); break;
+		case 5: DisplayStoredComponents(); break;
+		case 6: DisplayStoredAmmo(); DisplayFood(); DisplayPrototech(); DisplayStoredConsumbles(); break;
 		case 7: CleanNanoBARSs(); NanoBARSGrindControl(); break;
 		case 8: CleanRefinerys(); /*CleanAlgaeFarms();*/ break;
 		case 9: DisplayStoredMaterials(); break;
@@ -281,10 +285,14 @@ void RefreshBlockCache()
 	interiorLightsCast.Clear();
 	GridTerminalSystem.GetBlocksOfType<IMyInteriorLight>(InteriorLightBlocks);
 	foreach (var light in InteriorLightBlocks) interiorLightsCast.Add(light);
+	for (int i = 0; i < interiorLightsCast.Count; i++)
+		if (StringContains(interiorLightsCast[i].CustomName, MasterKeyword)) { interiorLightColor = interiorLightsCast[i].Color; break; }
 
 	reflectorLightsCast.Clear();
 	GridTerminalSystem.GetBlocksOfType<IMyReflectorLight>(ReflectorLightBlocks);
 	foreach (var light in ReflectorLightBlocks) reflectorLightsCast.Add(light);
+	for (int i = 0; i < reflectorLightsCast.Count; i++)
+		if (StringContains(reflectorLightsCast[i].CustomName, MasterKeyword)) { reflectorLightColor = reflectorLightsCast[i].Color; break; }
 
 	invMatBlock        = BlockNamed(StorageMaterialsKeyword);
 	invCompBlock       = BlockNamed(StorageComponentsKeyword);
@@ -317,11 +325,16 @@ void RefreshBlockCache()
 	componentsDisplay  = GetTextSurface(BlockNamed(StorageComponentsDisplayKeyword) as IMyTextSurfaceProvider, StorageComponentsDisplayPanel);
 	ConsumblesDisplay  = GetTextSurface(BlockNamed(StorageConsumblesDisplayKeyword) as IMyTextSurfaceProvider, StorageConsumblesDisplayPanel);
 	ammoDisplay        = GetTextSurface(BlockNamed(StorageAmmoDisplayKeyword) as IMyTextSurfaceProvider, StorageAmmoDisplayPanel);
+	foodDisplay        = GetTextSurface(BlockNamed(StorageFoodDisplayKeyword) as IMyTextSurfaceProvider, StorageFoodDisplayPanel);
+	prototechDisplay   = GetTextSurface(BlockNamed(StoragePrototechDisplayKeyword) as IMyTextSurfaceProvider, StoragePrototechDisplayPanel);
 
 	GridTerminalSystem.GetBlocksOfType<IMyFunctionalBlock>(algaeFarms, block => block.BlockDefinition.SubtypeId == "LargeBlockAlgaeFarm");
 
 	GridTerminalSystem.GetBlocksOfType<IMyBatteryBlock>(batteries);
 	batteryDisplay = GetTextSurface(BlockNamed(BatteryDisplayKeyword) as IMyTextSurfaceProvider, BatteryDisplayPanel);
+	
+	InteriorLightAdjust();
+	ReflectorLightAdjust();
 }
 // ------------------------------------------------------------------------------- Light
 void InteriorLightAdjust()
@@ -392,6 +405,16 @@ void DisplayStoredAmmo()
 {
 	if (AmmoInventory == null || ammoDisplay == null) return;
 	DisplayStored(AmmoInventory, ammoDisplay, "== Ammo ==","{0,-35}: {1,4:N0}");
+}
+void DisplayPrototech()
+{
+	if (PrototechInventory == null || prototechDisplay == null) return;
+	DisplayStored(PrototechInventory, prototechDisplay, "== Prototech ==","{0,-25}: {1,6:N0}");
+}
+void DisplayFood()
+{
+	if (FoodInventory == null || foodDisplay == null) return;
+	DisplayStored(FoodInventory, foodDisplay, "== Food ==");
 }
 void DisplayStored(IMyInventory inventory, IMyTextSurface display, string title, string format = "{0,-20}: {1,6:N0}")
 {
