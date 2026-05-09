@@ -783,8 +783,8 @@ void DisplayBatteries()
 	}
 	float totalInput = 0f, totalOutput = 0f;
 	float net = CalculateBatteriesNetPowerIO(out totalInput, out totalOutput);
+	RecordBatteryNetReading(net);
 	float trend = CalculateBatteryNetPowerTrend();
-	float lastReading = GetLatestBatteryNetReading();
 
 	float pct = (totalMax > 0f) ? totalStored / totalMax : 0f;
 	int barLen = 30;
@@ -799,10 +799,9 @@ void DisplayBatteries()
 	_sb.AppendLine(string.Format("Stored : {0} / {1}", FormatPower(totalStored, true), FormatPower(totalMax, true)));
 	_sb.AppendLine(string.Format("Input  : {0}", FormatPower(totalInput)));
 	_sb.AppendLine(string.Format("Output : {0}", FormatPower(totalOutput)));
-	_sb.AppendLine(string.Format("Net    : {1}{0}", FormatPower(net), (net >= 0) ? "+" : ""));
+	_sb.AppendLine(string.Format("Net    : {0}{1}", ShowSign(net), FormatPower(net,false,false)));
 	string trendText = (trend > 0f) ? "^" : (trend < 0f) ? "v" : "-";
-	_sb.AppendLine(string.Format("Trend  : {1}{0}/tick ({2}|{3,2}r)", FormatPower(trend), (trend >= 0f) ? "+" : "", trendText, batteryNetReadingCount));
-	_sb.AppendLine(string.Format("Last   : {1}{0}", FormatPower(lastReading), (lastReading >= 0f) ? "+" : ""));
+	_sb.AppendLine(string.Format("Trend  : {0}{1}/tick ({2}|{3,2}r)", ShowSign(trend), FormatPower(trend,false,false), trendText, batteryNetReadingCount));
 
 	float remaining = (net > 0f) ? totalMax - totalStored : totalStored;
 	float rate      = Math.Abs(net);
@@ -836,21 +835,14 @@ float CalculateBatteriesNetPowerIO(out float totalInput, out float totalOutput)
 	}
 	return totalInput - totalOutput;
 }
-float GetLatestBatteryNetReading()
+void RecordBatteryNetReading(float netPower)
 {
-	if (batteryNetReadingCount == 0) return 0f;
-	int latestIndex = (batteryNetReadingWriteIndex - 1 + BatteryNetTrendLength) % BatteryNetTrendLength;
-	return batteryNetReadings[latestIndex];
+	batteryNetReadings[batteryNetReadingWriteIndex] = netPower;
+	batteryNetReadingWriteIndex = (batteryNetReadingWriteIndex + 1) % BatteryNetTrendLength;
+	if (batteryNetReadingCount < BatteryNetTrendLength) batteryNetReadingCount++;
 }
 float CalculateBatteryNetPowerTrend()
 {
-	float totalInput = 0f, totalOutput = 0f;
-	float latestNetPower = CalculateBatteriesNetPowerIO(out totalInput, out totalOutput);
-
-	batteryNetReadings[batteryNetReadingWriteIndex] = latestNetPower;
-	batteryNetReadingWriteIndex = (batteryNetReadingWriteIndex + 1) % BatteryNetTrendLength;
-	if (batteryNetReadingCount < BatteryNetTrendLength) batteryNetReadingCount++;
-
 	if (batteryNetReadingCount < 2) return 0f;
 
 	int oldestIndex = (batteryNetReadingWriteIndex - batteryNetReadingCount + BatteryNetTrendLength) % BatteryNetTrendLength;
@@ -1161,11 +1153,17 @@ string CreateGPS(string name, Vector3D? pos)
 	if (pos == null) return $"GPS:{name}:::::#FF00FF00:";
 	return $"GPS:{name}:{pos.Value.X:F2}:{pos.Value.Y:F2}:{pos.Value.Z:F2}:#FF00FF00:";
 }
-string FormatPower(double power, bool storage = false)
+string FormatPower(double power, bool storage = false, bool signed = true)
 {
-	if (power < 1) return string.Format("{0,7:N3} kW{1}", power * 1e3, storage ? "h" : "");
-	if (power >= 1e6) return string.Format("{0,7:N3} GW{1}", power / 1e6, storage ? "h" : "");
+	double absPower = Math.Abs(power);
+	if (!signed) power = absPower;
+	if (absPower < 1) return string.Format("{0,7:N3} kW{1}", power * 1e3, storage ? "h" : "");
+	if (absPower >= 1e6) return string.Format("{0,7:N3} GW{1}", power / 1e6, storage ? "h" : "");
 	return string.Format("{0,7:N3} MW{1}", power, storage ? "h" : "");
+}
+string ShowSign(double value)
+{
+	return (value > 0) ? "+" : (value < 0) ? "-" : " ";
 }
 string FormatTypeId(MyInventoryItem item)
 {
