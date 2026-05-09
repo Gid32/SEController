@@ -220,8 +220,6 @@ public void Main(string argument, UpdateType updateSource)
 	{
 		case 0: if (BlockCountChanged()) {
 			RefreshBlockCache(); 
-			DisplayClocks();
-			
 		} break;
 		case 1: CleanAssemblers(); SortComponents(); break;
 		case 2: ProcessAssemblerQueue(commonAssemblers, invCompBlock); break;
@@ -339,6 +337,7 @@ void RefreshBlockCache()
 	
 	InteriorLightAdjust();
 	ReflectorLightAdjust();
+	DisplayClocks();
 }
 // ------------------------------------------------------------------------------- Light
 void InteriorLightAdjust()
