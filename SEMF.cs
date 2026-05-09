@@ -36,6 +36,7 @@ const int StoragePrototechDisplayPanel  = 0;
 // Battery
 const string BatteryDisplayKeyword = "[BatteryDisplay]";
 const int BatteryDisplayPanel      = 0;
+const int BatteryNetTrendLength    = 30;
 // Probe
 const string ProbeCameraKeyword  = "[ProbeCamera]";
 const string ProbeDisplayKeyword = "[ProbeTarget]";
@@ -56,6 +57,9 @@ const string AsmTypePrototech    = "Prototech Assembler";
 int CurrentBlockCount, PastBlockCount, SolarRedirects;
 bool nanoUseIgnoreColor;
 double Proximity, SolarDirectionSwitch, SolarPowerOutput, SolarPowerOutputPrev;
+float[] batteryNetReadings = new float[BatteryNetTrendLength];
+int batteryNetReadingCount = 0;
+int batteryNetReadingWriteIndex = 0;
 Vector3 nanoIgnoreHSV;
 ////////////////////////////////////// LISTS ///////////////////////////////////
 Dictionary<string, string> assemblerBlueprintMap = new Dictionary<string, string>();
@@ -769,17 +773,19 @@ void DisplayBatteries()
 	if (batteries == null || batteries.Count == 0) return;
 
 	float totalStored  = 0f, totalMax   = 0f;
-	float totalInput   = 0f, totalOutput = 0f;
 	int autoCount = 0;
 	for (int i = 0; i < batteries.Count; i++)
 	{
 		if (batteries[i].ChargeMode != ChargeMode.Auto) continue;
 		totalStored  += batteries[i].CurrentStoredPower;
 		totalMax     += batteries[i].MaxStoredPower;
-		totalInput   += batteries[i].CurrentInput;
-		totalOutput  += batteries[i].CurrentOutput;
 		autoCount++;
 	}
+	float totalInput = 0f, totalOutput = 0f;
+	float net = CalculateBatteriesNetPowerIO(out totalInput, out totalOutput);
+	float trend = CalculateBatteryNetPowerTrend();
+	float lastReading = GetLatestBatteryNetReading();
+
 	float pct = (totalMax > 0f) ? totalStored / totalMax : 0f;
 	int barLen = 30;
 	int filled = (int)Math.Round(pct * barLen);
@@ -793,8 +799,10 @@ void DisplayBatteries()
 	_sb.AppendLine(string.Format("Stored : {0} / {1}", FormatPower(totalStored, true), FormatPower(totalMax, true)));
 	_sb.AppendLine(string.Format("Input  : {0}", FormatPower(totalInput)));
 	_sb.AppendLine(string.Format("Output : {0}", FormatPower(totalOutput)));
-	float net = totalInput - totalOutput;
 	_sb.AppendLine(string.Format("Net    : {1}{0}", FormatPower(net), (net >= 0) ? "+" : ""));
+	string trendText = (trend > 0f) ? "^" : (trend < 0f) ? "v" : "-";
+	_sb.AppendLine(string.Format("Trend  : {1}{0}/tick ({2}|{3,2}r)", FormatPower(trend), (trend >= 0f) ? "+" : "", trendText, batteryNetReadingCount));
+	_sb.AppendLine(string.Format("Last   : {1}{0}", FormatPower(lastReading), (lastReading >= 0f) ? "+" : ""));
 
 	float remaining = (net > 0f) ? totalMax - totalStored : totalStored;
 	float rate      = Math.Abs(net);
@@ -814,6 +822,58 @@ void DisplayBatteries()
 
 	WriteToDisplay(batteryDisplay);
 }
+float CalculateBatteriesNetPowerIO(out float totalInput, out float totalOutput)
+{
+	totalInput = 0f;
+	totalOutput = 0f;
+	if (batteries == null || batteries.Count == 0) return 0f;
+
+	for (int i = 0; i < batteries.Count; i++)
+	{
+		if (batteries[i].ChargeMode != ChargeMode.Auto) continue;
+		totalInput += batteries[i].CurrentInput;
+		totalOutput += batteries[i].CurrentOutput;
+	}
+	return totalInput - totalOutput;
+}
+float GetLatestBatteryNetReading()
+{
+	if (batteryNetReadingCount == 0) return 0f;
+	int latestIndex = (batteryNetReadingWriteIndex - 1 + BatteryNetTrendLength) % BatteryNetTrendLength;
+	return batteryNetReadings[latestIndex];
+}
+float CalculateBatteryNetPowerTrend()
+{
+	float totalInput = 0f, totalOutput = 0f;
+	float latestNetPower = CalculateBatteriesNetPowerIO(out totalInput, out totalOutput);
+
+	batteryNetReadings[batteryNetReadingWriteIndex] = latestNetPower;
+	batteryNetReadingWriteIndex = (batteryNetReadingWriteIndex + 1) % BatteryNetTrendLength;
+	if (batteryNetReadingCount < BatteryNetTrendLength) batteryNetReadingCount++;
+
+	if (batteryNetReadingCount < 2) return 0f;
+
+	int oldestIndex = (batteryNetReadingWriteIndex - batteryNetReadingCount + BatteryNetTrendLength) % BatteryNetTrendLength;
+	double sumX = 0d, sumY = 0d, sumXY = 0d, sumXX = 0d;
+	int n = batteryNetReadingCount;
+
+	for (int i = 0; i < n; i++)
+	{
+		int idx = (oldestIndex + i) % BatteryNetTrendLength;
+		double x = i;
+		double y = batteryNetReadings[idx];
+		sumX += x;
+		sumY += y;
+		sumXY += x * y;
+		sumXX += x * x;
+	}
+
+	double denominator = n * sumXX - sumX * sumX;
+	if (Math.Abs(denominator) < 1e-9) return 0f;
+
+	return (float)((n * sumXY - sumX * sumY) / denominator);
+}
+
 // ------------------------------------------------------------------------------- Solar
 void SolarAdjust()
 {
