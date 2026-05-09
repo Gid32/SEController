@@ -36,7 +36,7 @@ const int StoragePrototechDisplayPanel  = 0;
 // Battery
 const string BatteryDisplayKeyword = "[BatteryDisplay]";
 const int BatteryDisplayPanel      = 0;
-const int BatteryNetTrendLength    = 30;
+const int BatteryNetTrendLength    = 60;
 // Probe
 const string ProbeCameraKeyword  = "[ProbeCamera]";
 const string ProbeDisplayKeyword = "[ProbeTarget]";
@@ -226,14 +226,14 @@ public void Main(string argument, UpdateType updateSource)
 		case 1: CleanAssemblers(); SortComponents(); break;
 		case 2: ProcessAssemblerQueue(commonAssemblers, invCompBlock); break;
 		case 3: ProcessAssemblerQueue(commonAssemblers, invAmmoBlock); break;
-		case 4:	ProcessAssemblerQueue(prototechAssemblers, invPrototechBlock); break;
+		case 4:	ProcessAssemblerQueue(prototechAssemblers, invPrototechBlock); DisplayBatteries(); break;
 		case 5: DisplayStoredComponents(); break;
-		case 6: DisplayStoredAmmo(); DisplayFood(); DisplayPrototech(); DisplayStoredConsumbles(); break;
+		case 6: DisplayStoredAmmo(); DisplayFood(); break;
 		case 7: CleanNanoBARSs(); NanoBARSGrindControl(); break;
 		case 8: CleanRefinerys(); /*CleanAlgaeFarms();*/ break;
 		case 9: DisplayStoredMaterials(); break;
-		case 10: SolarAdjust(); break;
-		case 11: DisplayBatteries(); break;
+		case 10: SolarAdjust(); DisplayBatteries(); break;
+		case 11: DisplayPrototech(); DisplayStoredConsumbles(); break;
 	}
 	tickTimes[Ticker] = (DateTime.Now - tickStart).TotalMilliseconds;
 	tickMaxTimes[Ticker] = Math.Max(tickTimes[Ticker], tickMaxTimes[Ticker]);
